@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from ..db import transaccion
 from .comunes import CERO, como_fecha, requerir_rol
+from . import facturacion
 from . import nomina as svc_nomina
 
 
@@ -91,6 +92,33 @@ def transferencias_pendientes(conn, sesion) -> dict:
     cols = [("folio", "Folio", "texto"), ("pagado_en", "Fecha", "fechahora"), ("monto", "Monto", "dinero"),
             ("referencia", "Clave de rastreo", "texto"), ("cobro", "Cobró", "texto"), ("estado_orden", "Orden", "texto")]
     return _reporte("Transferencias por confirmar", cols, filas, "Pendientes de verificar en el banco", ("monto",))
+
+
+def por_facturar(conn, sesion, desde, hasta) -> dict:
+    """Órdenes que pidieron factura y todavía no se marcan como facturadas, recibidas hasta `hasta`.
+
+    Incluye las de meses anteriores que siguen pendientes (columna «Periodo» = «Anterior»): si solo se
+    mostraran las del mes, una factura olvidada desaparecería del reporte al cambiar de mes."""
+    requerir_rol(sesion, "administrador")
+    d, h = _rango(desde, hasta)
+    filas = _consulta(
+        conn, "SELECT o.folio, o.fecha_recepcion, o.estado, CONCAT_WS(' ', c.nombre, c.apellidos) AS cliente, "
+              "c.rfc, c.razon_social, c.regimen_fiscal, c.uso_cfdi, c.codigo_postal_fiscal, c.email, o.total, "
+              "s.pagado, s.saldo FROM ordenes o JOIN clientes c ON c.id = o.cliente_id "
+              "JOIN v_saldo_ordenes s ON s.orden_id = o.id "
+              "WHERE o.requiere_factura = 1 AND o.facturada = 0 AND o.estado <> 'cancelada' "
+              "AND DATE(o.fecha_recepcion) <= %s ORDER BY o.fecha_recepcion, o.id", (h,))
+    for f in filas:
+        f["periodo"] = "Anterior" if f["fecha_recepcion"].date() < d else "Del periodo"
+        falta = facturacion.faltantes(f)
+        f["datos"] = "Completos" if not falta else "Falta: " + ", ".join(falta)
+    cols = [("folio", "Folio", "texto"), ("fecha_recepcion", "Recibida", "fechahora"), ("periodo", "Periodo", "texto"),
+            ("cliente", "Cliente", "texto"), ("rfc", "RFC", "texto"), ("razon_social", "Razón social", "texto"),
+            ("regimen_fiscal", "Régimen", "texto"), ("uso_cfdi", "Uso CFDI", "texto"),
+            ("codigo_postal_fiscal", "C.P.", "texto"), ("email", "Correo", "texto"), ("datos", "Datos fiscales", "texto"),
+            ("total", "Total", "dinero"), ("pagado", "Pagado", "dinero"), ("saldo", "Saldo", "dinero")]
+    return _reporte("Órdenes por facturar", cols, filas,
+                    f"Pendientes recibidas del {d} al {h}, más las anteriores que siguen sin facturar", ("total",))
 
 
 def clientes_frecuentes(conn, limite: int = 20) -> dict:

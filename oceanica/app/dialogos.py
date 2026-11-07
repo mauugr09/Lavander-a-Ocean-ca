@@ -10,7 +10,8 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
 
 from ..config import RAIZ
 from ..seguridad import ErrorAcceso, autenticar_pin
-from ..servicios import caja, tickets, usuarios
+from ..servicios import caja, facturacion, tickets, usuarios
+from ..servicios.comunes import ErrorNegocio
 from .util import a_decimal, dinero, etiqueta, seguro
 
 
@@ -222,7 +223,7 @@ class ClienteDialog(QDialog):
     def __init__(self, parent, datos: dict | None = None):
         super().__init__(parent)
         self.setWindowTitle("Cliente")
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(460)
         d = datos or {}
         lay = QVBoxLayout(self)
         form = QFormLayout()
@@ -234,15 +235,67 @@ class ClienteDialog(QDialog):
         for etiq, w in (("Nombre *", self.nombre), ("Apellidos", self.apellidos), ("Teléfono", self.telefono),
                         ("Correo", self.email), ("Notas", self.notas)):
             form.addRow(etiq, w)
+
+        # Datos fiscales: opcionales; solo para los clientes que piden factura.
+        form.addRow(etiqueta("Datos para factura (solo si el cliente la pide; vienen en su constancia fiscal)", "suave", True))
+        self.rfc = QLineEdit(d.get("rfc") or "")
+        self.rfc.setMaxLength(15)
+        self.rfc.setPlaceholderText("12 o 13 caracteres")
+        self.rfc.textEdited.connect(self._rfc_mayusculas)
+        self.razon_social = QLineEdit(d.get("razon_social") or "")
+        self.razon_social.setPlaceholderText("Tal como aparece en la constancia")
+        self.regimen = QComboBox()
+        self.regimen.addItem("— Sin dato —", None)
+        for clave, nombre in facturacion.REGIMENES.items():
+            self.regimen.addItem(f"{clave} · {nombre}", clave)
+        self.regimen.setCurrentIndex(max(0, self.regimen.findData(d.get("regimen_fiscal"))))
+        self.uso = QComboBox()
+        self.uso.addItem("— Sin dato —", None)
+        for clave, nombre in facturacion.USOS_CFDI.items():
+            self.uso.addItem(f"{clave} · {nombre}", clave)
+        self.uso.setCurrentIndex(max(0, self.uso.findData(d.get("uso_cfdi"))))
+        for combo in (self.regimen, self.uso):  # los nombres del SAT son largos: que no ensanchen el diálogo
+            combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(28)
+        self.cp = QLineEdit(d.get("codigo_postal_fiscal") or "")
+        self.cp.setMaxLength(5)
+        self.cp.setValidator(QRegularExpressionValidator(QRegularExpression(r"\d{0,5}")))
+        for etiq, w in (("RFC", self.rfc), ("Razón social", self.razon_social), ("Régimen fiscal", self.regimen),
+                        ("Uso del CFDI", self.uso), ("C.P. fiscal", self.cp)):
+            form.addRow(etiq, w)
         lay.addLayout(form)
+        self.msg = etiqueta("", "error", True)
+        lay.addWidget(self.msg)
         bb = _botones(self, "Guardar")
-        bb.accepted.connect(self.accept)
+        bb.accepted.connect(self._aceptar)
         lay.addWidget(bb)
         self.nombre.setFocus()
 
+    def _rfc_mayusculas(self, t: str):
+        pos = self.rfc.cursorPosition()
+        self.rfc.setText(t.upper())
+        self.rfc.setCursorPosition(pos)
+
+    def _aceptar(self):
+        """Revisa aquí lo que el servicio va a rechazar, para no perder lo capturado si algo está mal."""
+        if not self.nombre.text().strip():
+            self.msg.setText("Escribe el nombre del cliente.")
+            return self.nombre.setFocus()
+        if self.email.text().strip() and "@" not in self.email.text():
+            self.msg.setText("El correo no es válido.")
+            return self.email.setFocus()
+        try:
+            facturacion.validar_datos_fiscales({k: v for k, v in self.valores().items() if k in facturacion.CAMPOS_FISCALES})
+        except ErrorNegocio as e:
+            self.msg.setText(str(e))
+            return
+        self.accept()
+
     def valores(self) -> dict:
         return {"nombre": self.nombre.text(), "apellidos": self.apellidos.text(), "telefono": self.telefono.text(),
-                "email": self.email.text(), "notas": self.notas.text()}
+                "email": self.email.text(), "notas": self.notas.text(), "rfc": self.rfc.text(),
+                "razon_social": self.razon_social.text(), "regimen_fiscal": self.regimen.currentData(),
+                "uso_cfdi": self.uso.currentData(), "codigo_postal_fiscal": self.cp.text()}
 
 
 class TicketDialog(QDialog):

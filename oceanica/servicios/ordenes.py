@@ -12,12 +12,16 @@ from .comunes import (CERO, ErrorNegocio, auditar, cantidad, config_si, config_v
                       escapar_like, requerir_rol, texto)
 
 ESTADOS = ("recibida", "en_proceso", "lista", "entregada", "cancelada")
+NOMBRE_ESTADO = {"recibida": "recibida", "en_proceso": "en proceso", "lista": "lista", "entregada": "entregada",
+                 "cancelada": "cancelada"}
 _ORDEN_FLUJO = {"recibida": 0, "en_proceso": 1, "lista": 2, "entregada": 3}
 
 
-def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo) -> int:
+def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo, requiere_factura) -> int:
     if not items:
         raise ErrorNegocio("Agrega al menos un servicio a la orden.")
+    if requiere_factura and cliente_id is None:
+        raise ErrorNegocio("Para facturar, elige o da de alta al cliente. Las ventas de mostrador no se facturan.")
     observaciones = texto(observaciones, "observaciones", 300, False)
     descuento = dinero(descuento, "descuento")
     if descuento < 0:
@@ -61,8 +65,9 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
         folio = siguiente_folio(cur, prefijo)
         cur.execute(
             "INSERT INTO ordenes (folio, cliente_id, usuario_id, fecha_recepcion, fecha_promesa, subtotal, "
-            "descuento, total, observaciones) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-            (folio, cliente_id, sesion["id"], ahora, fecha_promesa, subtotal, descuento, total, observaciones),
+            "descuento, total, observaciones, requiere_factura) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            (folio, cliente_id, sesion["id"], ahora, fecha_promesa, subtotal, descuento, total, observaciones,
+             int(bool(requiere_factura))),
         )
         orden_id = cur.lastrowid
         for servicio_id, desc, cant, precio, importe in lineas:
@@ -82,20 +87,23 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
                 raise ErrorNegocio("El anticipo no puede ser mayor que el total de la orden.")
             registrar_pago_cur(cur, sesion, orden_id, anticipo.get("metodo_pago_id"), monto,
                                "anticipo", anticipo.get("referencia"))
-        auditar(cur, sesion, "orden_creada", "ordenes", orden_id, f"{folio} total ${total}")
+        auditar(cur, sesion, "orden_creada", "ordenes", orden_id,
+                f"{folio} total ${total}" + (" (requiere factura)" if requiere_factura else ""))
         return orden_id
 
 
 def crear_orden(conn, sesion, items: list[dict], cliente_id: int | None = None,
                 fecha_promesa: datetime | None = None, descuento=0, observaciones: str | None = None,
-                anticipo: dict | None = None) -> int:
+                anticipo: dict | None = None, requiere_factura: bool = False) -> int:
     """items: [{'servicio_id', 'cantidad', 'descripcion'(opcional)}].
     anticipo: {'metodo_pago_id', 'monto', 'referencia'(opcional)} (requiere caja abierta).
+    requiere_factura: el cliente pidió factura (exige cliente; la factura se emite fuera del sistema).
     Todo ocurre en una sola transacción: si el anticipo falla, no se crea la orden."""
     requerir_rol(sesion, "administrador", "empleado")
     for intento in range(3):
         try:
-            return _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo)
+            return _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo,
+                          requiere_factura)
         except mysql.connector.IntegrityError as e:
             # Dos órdenes simultáneas pudieron calcular el mismo folio: se reintenta.
             if e.errno == 1062 and "folio" in str(e).lower() and intento < 2:
@@ -119,7 +127,7 @@ def cambiar_estado(conn, sesion, orden_id: int, nuevo_estado: str, nota: str | N
         if actual in ("entregada", "cancelada"):
             raise ErrorNegocio(f"La orden ya está {actual} y no puede cambiar de estado.")
         if nuevo_estado == actual:
-            raise ErrorNegocio(f"La orden ya está en estado '{actual}'.")
+            raise ErrorNegocio(f"La orden ya está {NOMBRE_ESTADO[actual]}.")
         if _ORDEN_FLUJO[nuevo_estado] < _ORDEN_FLUJO[actual]:
             if not es_admin(sesion):
                 raise ErrorNegocio("Solo el administrador puede regresar una orden a un estado anterior.")
@@ -160,12 +168,17 @@ def cancelar_orden(conn, sesion, orden_id: int, motivo: str) -> None:
     requerir_rol(sesion, "administrador", "empleado")
     motivo = texto(motivo, "motivo", 200)
     with transaccion(conn) as cur:
-        cur.execute("SELECT id, folio, estado FROM ordenes WHERE id = %s FOR UPDATE", (orden_id,))
+        cur.execute("SELECT id, folio, estado, facturada, factura_folio FROM ordenes WHERE id = %s FOR UPDATE",
+                    (orden_id,))
         o = cur.fetchone()
         if not o:
             raise ErrorNegocio("Orden no encontrada.")
         if o["estado"] in ("entregada", "cancelada"):
             raise ErrorNegocio(f"La orden ya está {o['estado']}.")
+        if o["facturada"]:
+            # Cancelar aquí no cancela el CFDI: quedaría una factura vigente de un servicio que no se cobró.
+            raise ErrorNegocio(f"La orden ya está facturada (folio {o['factura_folio'] or 'sin anotar'}). Cancela primero "
+                               "la factura en tu sistema de facturación y pide a la encargada que quite la marca.")
         if o["estado"] != "recibida" and not es_admin(sesion):
             raise ErrorNegocio("Solo el administrador puede cancelar una orden que ya está en proceso.")
         pagado = pagado_neto_cur(cur, orden_id)
@@ -189,10 +202,15 @@ def obtener_orden(conn, orden_id: int | None = None, folio: str | None = None) -
         o = cur.fetchone()
         if not o:
             raise ErrorNegocio("Orden no encontrada.")
-        cur.execute("SELECT id, nombre, apellidos, telefono FROM clientes WHERE id = %s", (o["cliente_id"],))
+        cur.execute("SELECT id, nombre, apellidos, telefono, email, rfc, razon_social, regimen_fiscal, uso_cfdi, "
+                    "codigo_postal_fiscal FROM clientes WHERE id = %s", (o["cliente_id"],))
         o["cliente"] = cur.fetchone()
         cur.execute("SELECT usuario FROM usuarios WHERE id = %s", (o["usuario_id"],))
         o["recibio"] = cur.fetchone()["usuario"]
+        o["facturo"] = None
+        if o["facturada_por"]:
+            cur.execute("SELECT usuario FROM usuarios WHERE id = %s", (o["facturada_por"],))
+            o["facturo"] = cur.fetchone()["usuario"]
         cur.execute(
             "SELECT d.id, d.servicio_id, s.nombre AS servicio, s.unidad, d.descripcion, d.cantidad, "
             "d.precio_unitario, d.importe FROM orden_detalle d JOIN servicios s ON s.id = d.servicio_id "
@@ -219,8 +237,11 @@ def obtener_orden(conn, orden_id: int | None = None, folio: str | None = None) -
 
 
 def listar_ordenes(conn, estados: list[str] | None = None, solo_abiertas: bool = False, cliente_id=None,
-                   desde=None, hasta=None, texto_busqueda: str | None = None, limite: int = 200) -> list[dict]:
+                   desde=None, hasta=None, texto_busqueda: str | None = None, limite: int = 200,
+                   por_facturar: bool = False) -> list[dict]:
     where, params = [], []
+    if por_facturar:
+        where.append("o.requiere_factura = 1 AND o.facturada = 0 AND o.estado <> 'cancelada'")
     if solo_abiertas:
         where.append("o.estado IN ('recibida','en_proceso','lista')")
     if estados:
@@ -243,7 +264,7 @@ def listar_ordenes(conn, estados: list[str] | None = None, solo_abiertas: bool =
         where.append("(o.folio LIKE %s OR c.nombre LIKE %s OR c.apellidos LIKE %s OR c.telefono LIKE %s)")
         params += [patron] * 4
     sql = (
-        "SELECT o.id, o.folio, o.estado, o.fecha_recepcion, o.fecha_promesa, o.total, "
+        "SELECT o.id, o.folio, o.estado, o.fecha_recepcion, o.fecha_promesa, o.total, o.requiere_factura, o.facturada, "
         "CONCAT_WS(' ', c.nombre, c.apellidos) AS cliente, c.telefono, "
         "COALESCE((SELECT SUM(CASE WHEN p.tipo='reembolso' THEN -p.monto ELSE p.monto END) "
         "FROM pagos p WHERE p.orden_id = o.id), 0) AS pagado "

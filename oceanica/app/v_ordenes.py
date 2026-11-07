@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton, QTextBrowser,
                                QVBoxLayout, QWidget)
 
-from ..servicios import caja, configuracion, ordenes, tickets
+from ..servicios import caja, configuracion, facturacion, ordenes, tickets
 from . import tema
 from .dialogos import CobroDialog, TicketDialog
 from .util import (ESTADOS, cantidad_txt, crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, poblar, seguro,
@@ -18,7 +18,7 @@ from .util import (ESTADOS, cantidad_txt, crear_tabla, dinero, etiqueta, fecha_h
 
 SIGUIENTE = {"recibida": ("en_proceso", "Marcar en proceso"), "en_proceso": ("lista", "Marcar lista")}
 FILTROS = [("Abiertas", None), ("Todas", "todas"), ("Recibidas", "recibida"), ("En proceso", "en_proceso"),
-           ("Listas", "lista"), ("Entregadas", "entregada"), ("Canceladas", "cancelada")]
+           ("Listas", "lista"), ("Entregadas", "entregada"), ("Canceladas", "cancelada"), ("Por facturar", "por_facturar")]
 
 
 class OrdenesView(QWidget):
@@ -65,10 +65,12 @@ class OrdenesView(QWidget):
         self.b_entregar = QPushButton("Entregar (F7)")
         self.b_entregar.setProperty("rol", "primario")
         self.b_ticket = QPushButton("Ticket")
+        self.b_factura = QPushButton("Factura")
         self.b_cancelar = QPushButton("Cancelar orden")
         self.b_cancelar.setProperty("rol", "peligro")
         f2.addWidget(self.b_entregar, 1)
         f2.addWidget(self.b_ticket)
+        f2.addWidget(self.b_factura)
         f2.addWidget(self.b_cancelar)
         dl.addLayout(f2)
         raiz.addWidget(der, 4)
@@ -82,6 +84,7 @@ class OrdenesView(QWidget):
         self.b_cobrar.clicked.connect(self.cobrar)
         self.b_entregar.clicked.connect(self.entregar)
         self.b_ticket.clicked.connect(self.ver_ticket)
+        self.b_factura.clicked.connect(self.factura)
         self.b_cancelar.clicked.connect(self.cancelar)
         QShortcut(QKeySequence("F3"), self, activated=self.buscar.setFocus)
         QShortcut(QKeySequence("F6"), self, activated=self.cobrar)
@@ -100,7 +103,10 @@ class OrdenesView(QWidget):
 
     def recargar(self):
         sel = self.filtro.currentData()
-        kw = {"solo_abiertas": True} if sel is None else ({} if sel == "todas" else {"estados": [sel]})
+        if sel == "por_facturar":
+            kw = {"por_facturar": True}
+        else:
+            kw = {"solo_abiertas": True} if sel is None else ({} if sel == "todas" else {"estados": [sel]})
         ok, filas = seguro(self, ordenes.listar_ordenes, self.ctx.conn, texto_busqueda=self.buscar.text() or None, **kw)
         filas = filas or []
         ahora = datetime.now()
@@ -160,6 +166,13 @@ class OrdenesView(QWidget):
                      f"{escape(p['metodo'])}{marca}</small><br>")
         if o.get("observaciones"):
             h.append(f"<p>Nota: {escape(o['observaciones'])}</p>")
+        if o["facturada"]:
+            h.append(f"<p style='color:{tema.OK}'>Facturada" + (f" · folio {escape(o['factura_folio'])}" if o["factura_folio"] else "")
+                     + f" · {fecha_hora(o['facturada_en'])} ({escape(o['facturo'] or '')})</p>")
+        elif o["requiere_factura"]:
+            falta = facturacion.faltantes(cli)
+            h.append(f"<p style='color:{tema.ALERTA}'>Pidió factura, falta emitirla"
+                     + (f"<br><small>Faltan datos del cliente: {escape(', '.join(falta))}</small>" if falta else "") + "</p>")
         self.detalle.setHtml("".join(h))
         self._botones()
 
@@ -174,6 +187,7 @@ class OrdenesView(QWidget):
         self.b_entregar.setEnabled(abierta)
         self.b_cancelar.setEnabled(abierta)
         self.b_ticket.setEnabled(bool(o))
+        self.b_factura.setEnabled(bool(o) and (o["estado"] != "cancelada" or bool(o["facturada"])))
 
     # ------------------------------------------------------------- acciones
     def _tras_cambio(self):
@@ -308,6 +322,56 @@ class OrdenesView(QWidget):
             if not ok:
                 return
         ok, _ = seguro(self, ordenes.cancelar_orden, self.ctx.conn, sesion, o["id"], motivo)
+        if ok:
+            self._tras_cambio()
+
+    def factura(self):
+        """Empleado: anota que el cliente pidió (o ya no pide) factura. Encargada: además, que ya se emitió."""
+        o = self.orden
+        if not o:
+            return
+        if o["facturada"]:
+            if not self.ctx.es_admin:
+                QMessageBox.information(self, "Factura", f"{o['folio']} ya está facturada"
+                                        + (f" (folio {o['factura_folio']})." if o["factura_folio"] else "."))
+                return
+            caja_ = QMessageBox(QMessageBox.Question, "Factura",
+                                f"{o['folio']} está marcada como facturada"
+                                + (f" (folio {o['factura_folio']})." if o["factura_folio"] else ".")
+                                + "\n\nQuita la marca solo si te equivocaste o si cancelaste la factura en el SAT.", parent=self)
+            b_quitar = caja_.addButton("Quitar marca de facturada", QMessageBox.DestructiveRole)
+            caja_.addButton("Cancelar", QMessageBox.RejectRole)
+            caja_.exec()
+            if caja_.clickedButton() is not b_quitar:
+                return
+            motivo, okp = QInputDialog.getText(self, "Quitar marca de facturada", "Motivo (obligatorio):")
+            if not okp or not motivo.strip():
+                return
+            ok, _ = seguro(self, facturacion.desmarcar_facturada, self.ctx.conn, self.ctx.admin, o["id"], motivo)
+            if ok:
+                self._tras_cambio()
+            return
+
+        caja_ = QMessageBox(QMessageBox.Question, "Factura", f"{o['folio']}: "
+                            + ("el cliente pidió factura." if o["requiere_factura"] else "no se ha pedido factura."), parent=self)
+        b_marcar = caja_.addButton("Ya se facturó", QMessageBox.AcceptRole) if self.ctx.es_admin else None
+        b_pedir = None if o["requiere_factura"] else caja_.addButton("El cliente pide factura", QMessageBox.ActionRole)
+        b_quitar = caja_.addButton("Ya no la pide", QMessageBox.ActionRole) if o["requiere_factura"] else None
+        caja_.addButton("Cancelar", QMessageBox.RejectRole)
+        caja_.exec()
+        elegido = caja_.clickedButton()
+        if elegido is None or elegido not in (b_marcar, b_pedir, b_quitar):
+            return
+        if elegido is b_marcar:
+            folio, okp = QInputDialog.getText(self, "Factura emitida", "Folio o UUID de la factura (opcional):")
+            if not okp:
+                return
+            ok, _ = seguro(self, facturacion.marcar_facturada, self.ctx.conn, self.ctx.admin, o["id"], folio)
+        else:
+            sesion = self.ctx.identificar(self, sensible=False)
+            if not sesion:
+                return
+            ok, _ = seguro(self, facturacion.marcar_requiere_factura, self.ctx.conn, sesion, o["id"], elegido is b_pedir)
         if ok:
             self._tras_cambio()
 

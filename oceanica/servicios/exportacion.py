@@ -3,13 +3,16 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from html import escape
 from pathlib import Path
 
 import xlsxwriter
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import LETTER, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .comunes import ErrorNegocio
@@ -94,6 +97,29 @@ def exportar_xlsx(reporte: dict, ruta, negocio: str = "") -> Path:
     return ruta
 
 
+def _anchos_que_caben(datos: list[list[str]], disponible: float, fuente: float) -> list[float] | None:
+    """Anchos de columna para que la tabla quepa en la hoja. None si ya cabe con su ancho natural.
+
+    Ninguna columna queda más angosta que su palabra más larga (un folio o un RFC no se parten a la mitad);
+    lo que sobra se reparte entre las columnas con textos largos, que se parten en renglones."""
+    relleno = 12  # 6 pt por lado (relleno por omisión de reportlab)
+
+    def ancho(t, negrita):
+        return stringWidth(t, "Helvetica-Bold" if negrita else "Helvetica", fuente)
+
+    columnas = range(len(datos[0]))
+    natural = [max(ancho(str(f[j]), i == 0) for i, f in enumerate(datos)) + relleno for j in columnas]
+    if sum(natural) <= disponible:
+        return None
+    minimo = [max(ancho(p, i == 0) for i, f in enumerate(datos) for p in (str(f[j]).split() or [""])) + relleno
+              for j in columnas]
+    sobra = disponible - sum(minimo)
+    holgura = [n - m for n, m in zip(natural, minimo)]
+    if sobra <= 0 or not sum(holgura):  # ni partiendo renglones cabe: se aprieta todo parejo
+        return [m * disponible / sum(minimo) for m in minimo]
+    return [m + sobra * h / sum(holgura) for m, h in zip(minimo, holgura)]
+
+
 def exportar_pdf(reporte: dict, ruta, negocio: str = "") -> Path:
     ruta = Path(ruta)
     ruta.parent.mkdir(parents=True, exist_ok=True)
@@ -124,7 +150,15 @@ def exportar_pdf(reporte: dict, ruta, negocio: str = "") -> Path:
             estilo.append(("ALIGN", (j, 1), (j, -1), "RIGHT"))
     if totales:
         estilo += [("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"), ("LINEABOVE", (0, -1), (-1, -1), 1, colors.black)]
-    tabla = Table(datos, repeatRows=1)
+    anchos = _anchos_que_caben(datos, pagina[0] - 3 * cm, 7)
+    if anchos:  # no cabe: los textos se convierten en párrafos que se parten en renglones dentro de su columna
+        celda = est["BodyText"].clone("celda", fontName="Helvetica", fontSize=7, leading=8.5)
+        encab = celda.clone("encab", fontName="Helvetica-Bold", textColor=colors.white)
+        derecha = celda.clone("derecha", alignment=TA_RIGHT)
+        numericas = {j for j, (_, _, tipo) in enumerate(cols) if tipo in ("dinero", "numero")}
+        datos = [[Paragraph(escape(str(v)), encab if i == 0 else (derecha if j in numericas else celda))
+                  for j, v in enumerate(fila)] for i, fila in enumerate(datos)]
+    tabla = Table(datos, repeatRows=1, colWidths=anchos)
     tabla.setStyle(TableStyle(estilo))
     elementos.append(tabla)
     elementos += [Spacer(1, 0.5 * cm), Paragraph(f"Generado el {datetime.now():%d/%m/%Y %H:%M}", est["Normal"])]

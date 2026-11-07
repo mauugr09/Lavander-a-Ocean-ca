@@ -11,16 +11,17 @@ from PySide6.QtWidgets import (QComboBox, QDateEdit, QFileDialog, QGridLayout, Q
 from ..servicios import exportacion, reportes
 from .util import crear_tabla, dinero, etiqueta, seguro, tarjeta
 
-# (título, función, ¿usa rango de fechas?)
+# (título, función, ¿usa rango de fechas?, ¿pide la sesión?)
 REPORTES = [
-    ("Ventas por día", reportes.ventas_por_dia, True),
-    ("Cobros por método de pago", reportes.cobros_por_metodo, True),
-    ("Ventas por servicio", reportes.ventas_por_servicio, True),
-    ("Órdenes pendientes", reportes.ordenes_pendientes, False),
-    ("Clientes frecuentes", reportes.clientes_frecuentes, False),
-    ("Insumos bajo el mínimo", reportes.insumos_bajos, False),
-    ("Asistencia", reportes.asistencia, True),
-    ("Cortes de caja", reportes.cortes_de_caja, True),
+    ("Ventas por día", reportes.ventas_por_dia, True, False),
+    ("Cobros por método de pago", reportes.cobros_por_metodo, True, False),
+    ("Ventas por servicio", reportes.ventas_por_servicio, True, False),
+    ("Órdenes pendientes", reportes.ordenes_pendientes, False, False),
+    ("Clientes frecuentes", reportes.clientes_frecuentes, False, False),
+    ("Insumos bajo el mínimo", reportes.insumos_bajos, False, False),
+    ("Asistencia", reportes.asistencia, True, False),
+    ("Cortes de caja", reportes.cortes_de_caja, True, False),
+    ("Órdenes por facturar", reportes.por_facturar, True, True),
 ]
 PERIODOS = ["Hoy", "Ayer", "Esta semana", "Este mes", "Mes pasado", "Personalizado"]
 NUMERICOS = {"dinero", "numero"}
@@ -94,7 +95,7 @@ class ReportesView(QWidget):
 
         fila2 = QHBoxLayout()
         self.selector = QComboBox()
-        for t, _, _ in REPORTES:
+        for t, *_ in REPORTES:
             self.selector.addItem(t)
         self.b_exportar = QPushButton("Exportar a Excel / PDF")
         self.b_exportar.setProperty("rol", "primario")
@@ -154,8 +155,9 @@ class ReportesView(QWidget):
             self.kpi["por_cobrar"].setText(dinero(r["por_cobrar"]))
             self.lb_alerta.setText(f"{r['ordenes_abiertas']} orden(es) abiertas, {r['ordenes_retrasadas']} con entrega vencida · "
                                    f"{r['clientes_nuevos']} cliente(s) nuevos en el periodo")
-        _, fn, usa_rango = REPORTES[self.selector.currentIndex()]
-        ok, rep = seguro(self, fn, self.ctx.conn, d, h) if usa_rango else seguro(self, fn, self.ctx.conn)
+        _, fn, usa_rango, usa_sesion = REPORTES[self.selector.currentIndex()]
+        args = ((self.ctx.admin,) if usa_sesion else ()) + ((d, h) if usa_rango else ())
+        ok, rep = seguro(self, fn, self.ctx.conn, *args)
         if ok:
             self.reporte = rep
             self._pintar(rep)

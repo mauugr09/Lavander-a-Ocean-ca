@@ -435,3 +435,182 @@ def test_horarios_y_ajustes_de_asistencia(qapp, conn, admin, empleado, mundo, mo
 def datetime_(dia, hora):
     from datetime import datetime
     return datetime(dia.year, dia.month, dia.day, hora)
+
+
+# ---------- factura (alcance mínimo) y pulido de uso -------------------------------------
+
+FISCAL = {"rfc": "ABC010203XY1", "razon_social": "Hotel del Lago", "regimen_fiscal": "601", "uso_cfdi": "G03",
+          "codigo_postal_fiscal": "54960"}
+
+
+def test_dialogo_de_cliente_valida_rfc_sin_perder_lo_capturado(qapp, conn):
+    dlg = dialogos.ClienteDialog(None)
+    dlg.nombre.setText("Hotel del Lago")
+    dlg.rfc.setText("ABC0102")
+    dlg._aceptar()
+    assert dlg.result() == 0 and "RFC" in dlg.msg.text()            # no se cierra: lo capturado sigue ahí
+    dlg.rfc.setText("abc010203xy1")
+    dlg.regimen.setCurrentIndex(dlg.regimen.findData("601"))
+    dlg.uso.setCurrentIndex(dlg.uso.findData("G03"))
+    dlg.cp.setText("54960")
+    dlg._aceptar()
+    assert dlg.result() == 1
+    v = dlg.valores()
+    assert v["regimen_fiscal"] == "601" and v["uso_cfdi"] == "G03" and v["codigo_postal_fiscal"] == "54960"
+    e = dialogos.ClienteDialog(None, {"nombre": "X", **FISCAL})             # al editar se precargan los datos
+    assert e.rfc.text() == "ABC010203XY1" and e.regimen.currentData() == "601" and e.uso.currentData() == "G03"
+    e.nombre.setText(" ")
+    e._aceptar()
+    assert e.result() == 0 and "nombre" in e.msg.text()
+
+
+def _mostrador_con_linea(ctx, monkeypatch):
+    from oceanica.app.v_mostrador import MostradorView
+    m = MostradorView(ctx)
+    m.al_mostrar()
+    m.tabla_serv.selectRow(0)
+    m.cantidad.setText("2")
+    m._agregar()
+    return m
+
+
+def test_mostrador_orden_con_factura(qapp, conn, admin, empleado, mundo, monkeypatch):
+    _sin_dialogos(monkeypatch)
+    avisos = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: avisos.append(a[2]))
+    ctx = Contexto(conn)
+    ctx.identificar = lambda *a, **k: empleado
+    m = _mostrador_con_linea(ctx, monkeypatch)
+    m.factura.setChecked(True)
+    assert "elige o da de alta al cliente" in m.info_cli.text()
+    m.guardar()                                                     # sin cliente no se puede facturar
+    assert avisos and "Para facturar" in avisos[-1] and ordenes.listar_ordenes(conn) == []
+    assert m.carrito                                                # no se perdió la captura
+
+    cid = clientes.crear_cliente(conn, admin, "Hotel", rfc="ABC010203XY1")
+    m.cliente.setText("Hot")
+    m._buscar_clientes("Hot")
+    m._elegir_cliente(next(iter(m.mapa_clientes)))
+    assert m.cliente_id == cid and "Faltan datos de factura: razón social" in m.info_cli.text()
+    m.guardar()
+    o = ordenes.obtener_orden(conn, ordenes.listar_ordenes(conn)[0]["id"])
+    assert o["requiere_factura"] == 1 and o["facturada"] == 0
+    assert not m.factura.isChecked()                                # la siguiente orden empieza sin la marca
+    from oceanica.servicios import tickets
+    assert "Factura: solicitada" in tickets.ticket_orden_texto(conn, o["id"])
+
+
+def test_esc_pregunta_antes_de_borrar_la_captura(qapp, conn, admin, mundo, monkeypatch):
+    _sin_dialogos(monkeypatch)
+    ctx = Contexto(conn)
+    ctx.admin = admin
+    m = _mostrador_con_linea(ctx, monkeypatch)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.No)
+    m._esc()
+    assert len(m.carrito.lineas) == 1                               # un Esc por error no borra la orden
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    m._esc()
+    assert not m.carrito
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: pytest.fail("con la orden vacía no debe preguntar"))
+    m._esc()
+
+
+def test_mostrador_explica_cuando_no_hay_servicios(qapp, conn, admin, monkeypatch):
+    _sin_dialogos(monkeypatch)
+    ctx = Contexto(conn)
+    ctx.admin = admin
+    from oceanica.app.v_mostrador import MostradorView
+    m = MostradorView(ctx)
+    m.al_mostrar()
+    assert "Servicios y precios" in m.lb_sin_serv.text()
+    m.servicios = [{"id": 1, "nombre": "Lavado", "unidad": "kilo", "precio": D("30")}]
+    m.filtro.setText("planch")
+    assert "planch" in m.lb_sin_serv.text()
+    m.filtro.setText("lav")
+    assert m.lb_sin_serv.text() == ""
+
+
+def test_factura_desde_la_pantalla_de_ordenes(qapp, conn, admin, empleado, mundo, monkeypatch):
+    from oceanica.servicios import facturacion
+    cid = clientes.crear_cliente(conn, admin, "Hotel", **FISCAL)
+    oid = ordenes.crear_orden(conn, empleado, [{"servicio_id": mundo["kilo"], "cantidad": 2}], cid)
+    ctx, ov = _vista_ordenes(conn, empleado, monkeypatch)
+    assert ov.b_factura.isEnabled()
+    _elegir(monkeypatch, "El cliente pide factura")                 # el empleado lo olvidó al capturar
+    ov.factura()
+    assert ordenes.obtener_orden(conn, oid)["requiere_factura"] == 1
+    assert "Pidió factura" in ov.detalle.toPlainText()
+
+    ctx.admin = admin                                               # la encargada la emite fuera y la marca
+    _elegir(monkeypatch, "Ya se facturó")
+    monkeypatch.setattr("oceanica.app.v_ordenes.QInputDialog.getText", lambda *a, **k: ("F-102", True))
+    ov.factura()
+    o = ordenes.obtener_orden(conn, oid)
+    assert o["facturada"] == 1 and o["factura_folio"] == "F-102"
+    assert "Facturada · folio F-102" in ov.detalle.toPlainText()
+    ov.filtro.setCurrentIndex(ov.filtro.findData("por_facturar"))
+    assert ov.tabla.rowCount() == 0
+
+    ctx.admin = None                                                # el empleado no puede quitar la marca
+    infos = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: infos.append(a[2]))
+    ov.filtro.setCurrentIndex(1)
+    ov.tabla.selectRow(0)
+    ov.factura()
+    assert infos and "ya está facturada" in infos[0] and ordenes.obtener_orden(conn, oid)["facturada"] == 1
+
+    ctx.admin = admin
+    _elegir(monkeypatch, "Quitar marca de facturada")
+    monkeypatch.setattr("oceanica.app.v_ordenes.QInputDialog.getText", lambda *a, **k: ("Se canceló en el SAT", True))
+    ov.factura()
+    assert ordenes.obtener_orden(conn, oid)["facturada"] == 0
+    ov.filtro.setCurrentIndex(ov.filtro.findData("por_facturar"))
+    assert ov.tabla.rowCount() == 1
+    assert facturacion.faltantes(ordenes.obtener_orden(conn, oid)["cliente"]) == []
+
+
+def test_reporte_por_facturar_se_exporta_desde_la_pantalla(qapp, conn, admin, empleado, mundo, monkeypatch, tmp_path):
+    from oceanica.app import v_reportes
+    cid = clientes.crear_cliente(conn, admin, "Hotel", **FISCAL)
+    ordenes.crear_orden(conn, empleado, [{"servicio_id": mundo["kilo"], "cantidad": 2}], cid, requiere_factura=True)
+    _sin_dialogos(monkeypatch)
+    ctx = Contexto(conn)
+    ctx.admin = admin
+    vista = v_reportes.ReportesView(ctx)
+    vista.al_mostrar()
+    vista.selector.setCurrentText("Órdenes por facturar")
+    assert vista.reporte["titulo"] == "Órdenes por facturar" and vista.tabla.rowCount() == 2   # la orden y el total
+    for formato in ("xlsx", "pdf"):
+        destino = tmp_path / f"facturar.{formato}"
+        monkeypatch.setattr(v_reportes.QFileDialog, "getSaveFileName", lambda *a, **k: (str(destino), ""))
+        monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.No)
+        vista.exportar()
+        assert destino.exists() and destino.stat().st_size > 500
+    vista.close()
+
+
+def test_errores_de_base_no_muestran_texto_tecnico(qapp, monkeypatch):
+    import mysql.connector
+    from oceanica.app.util import seguro
+    vistos = []
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: vistos.append(a[2]))
+
+    def falla():
+        raise mysql.connector.IntegrityError(msg="Cannot add or update a child row: a foreign key constraint fails",
+                                             errno=1452)
+    assert seguro(None, falla) == (False, None)
+    assert vistos and "foreign key" not in vistos[0] and "1452" not in vistos[0] and "logs" in vistos[0]
+
+
+def test_clientes_explica_lista_vacia(qapp, conn, admin):
+    from oceanica.app.v_clientes import ClientesView
+    ctx = Contexto(conn)
+    ctx.admin = admin
+    v = ClientesView(ctx)
+    v.al_mostrar()
+    assert "Todavía no hay clientes" in v.lb_vacio.text()
+    clientes.crear_cliente(conn, admin, "Hotel", **FISCAL)
+    v.buscar.setText("ABC0102")                                     # también busca por RFC
+    assert v.tabla.rowCount() == 1 and v.tabla.item(0, 3).text() == "ABC010203XY1" and v.lb_vacio.text() == ""
+    v.buscar.setText("zzz")
+    assert "Ningún cliente coincide" in v.lb_vacio.text()

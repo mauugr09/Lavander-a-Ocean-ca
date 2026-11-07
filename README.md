@@ -2,20 +2,33 @@
 
 Sistema de gestión para Lavandería Oceánica: órdenes, caja, clientes, inventario, empleados, asistencia,
 nómina (control interno), reportes, tickets y respaldos. MySQL 8 o MariaDB 10.3+ (recomendado MariaDB 10.11 LTS o superior; InnoDB, `utf8mb4_unicode_ci`) y Python 3.12+.
-La aplicación de escritorio (PySide6) se inicia con `python -m oceanica`. Faltan las pantallas de reportes, inventario y nómina; el backend de esas ya existe.
+La aplicación de escritorio (PySide6) se inicia con `python -m oceanica`. Reglas para quien siga el desarrollo: `AGENTS.md`.
 
 ## Estructura
 
 | Ruta | Contenido |
 |---|---|
-| `db/migrations/001..005` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar |
+| `db/migrations/001..008` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente (nómina), datos fiscales del cliente y banderas de factura en la orden |
 | `oceanica/init_db.py` | Instalador: crea la base, un usuario MySQL limitado y el primer administrador |
 | `oceanica/migrar.py` | Aplica migraciones pendientes al actualizar el sistema |
 | `oceanica/respaldos.py` | Respaldo `.sql.gz` con mysqldump, copia externa, retención y restauración |
 | `oceanica/seguridad.py` | bcrypt, política de contraseñas, bloqueo tras 5 intentos (15 min), bitácora |
 | `oceanica/app/` | Aplicación de escritorio PySide6: login, mostrador, órdenes, caja, asistencia, clientes y, para el administrador, inventario (también en mostrador), reportes con exportación a Excel/PDF, servicios y precios, empleados y PIN, transferencias y configuración |
-| `oceanica/servicios/` | Reglas de negocio: usuarios, configuración, clientes, catálogo, caja, órdenes, inventario, empleados, nómina, reportes, exportación, tickets, carga inicial |
-| `tests/` | 105 pruebas (esquema, seguridad y servicios contra base real) |
+| `oceanica/servicios/` | Reglas de negocio: usuarios, configuración, clientes, catálogo, caja, órdenes, facturación (sin timbrado), inventario, empleados, nómina, reportes, exportación, tickets, carga inicial |
+| `tests/` | 153 pruebas (esquema, seguridad, servicios contra base real y pantallas con Qt `offscreen`) |
+
+## Notas de actualización
+
+Antes de cada actualización: respaldo manual (`python -m oceanica.respaldos --manual`, o Configuración → Respaldo).
+Después: `python -m oceanica.migrar` (o `OceanicaAdmin.exe migrar`). Solo aplica lo pendiente; volver a correrlo no hace nada.
+
+- **Migraciones 007 y 008 (factura, sin CFDI).** 007 agrega a `clientes` RFC, razón social, régimen fiscal, uso del
+  CFDI y código postal fiscal (todos opcionales; el correo de factura es el `email` que ya existía). 008 agrega a
+  `ordenes` «requiere factura», «facturada», folio externo, fecha y quién la marcó. No cambian datos existentes: los
+  clientes quedan sin datos fiscales y las órdenes anteriores como «no requiere factura». Cada migración es una sola
+  sentencia `ALTER TABLE`: si falla, no deja la tabla a medias y se puede volver a correr. Probadas en MariaDB 10.3.9 y 10.11.
+- Cambios de uso: Esc en «Nueva orden» pregunta antes de borrar si ya hay servicios capturados; los errores de base de
+  datos y de impresión ya no muestran texto técnico (el detalle queda en `logs/oceanica.log`).
 
 ## Instalación en la PC del local
 
@@ -49,7 +62,7 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 
 - Entrada: **mostrador** (sin contraseña) o **administrador** (usuario y contraseña; se cierra solo tras 10 minutos sin actividad).
 - En el mostrador, cada orden, cobro, entrega, apertura/cierre de caja y llegada/salida pide el **PIN** de quien la hace. Consultar y editar clientes reutiliza la identidad 2 minutos.
-- Atajos: F2 buscar servicio · F3 cliente (en Órdenes: buscar) · F4 cliente nuevo · F5 guardar y cobrar · Esc limpiar · F6 cobrar saldo · F7 entregar · Ctrl+1…9 cambiar de sección.
+- Atajos: F2 buscar servicio · F3 cliente (en Órdenes: buscar) · F4 cliente nuevo · Alt+F requiere factura · F5 guardar y cobrar · Esc limpiar (pregunta si ya hay servicios) · F6 cobrar saldo · F7 entregar · Ctrl+1…9 cambiar de sección.
 - Captura rápida: escribe parte del nombre del servicio, Enter, cantidad, Enter. La búsqueda ignora acentos y mayúsculas.
 - Los tickets se muestran en pantalla; se imprimen en la térmica (Windows + pywin32, nombre en la configuración `impresora_ticket`) o se abren como PDF (carpeta `tickets/`).
 - Registro de errores: `logs/oceanica.log`.
@@ -65,6 +78,17 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 - Una transferencia exige clave de rastreo y queda "por confirmar". Cubre el saldo, pero el administrador debe confirmarla (`caja.confirmar_transferencia`) o rechazarla (`rechazar_transferencia`, requiere caja abierta); al rechazar, la orden recupera su saldo.
 - Quién puede entregar con transferencia sin confirmar: configuración `entrega_transferencia_pendiente` = `no` / `admin` / `todos` (hoy `todos`; queda en bitácora).
 - El corte de caja y el ticket muestran cuánto está por confirmar. Reporte: `reportes.transferencias_pendientes`.
+
+## Factura (alcance mínimo, sin CFDI)
+
+El sistema **no timbra**: la factura se emite en el portal del SAT o en el sistema de facturación del dueño. Aquí solo se controla qué hay que facturar.
+
+- **Cliente**: RFC (formato y fecha validados: 12 caracteres empresa, 13 persona física), razón social, régimen fiscal y uso del CFDI (catálogos del SAT), código postal fiscal (5 dígitos) y correo. Todo opcional: se puede capturar por partes; el sistema avisa qué falta.
+- **Orden**: casilla «Requiere factura» al capturar (Alt+F). Exige cliente: las ventas de mostrador no se facturan. Si se olvidó, se marca después en Órdenes → «Factura».
+- **Facturada**: solo la encargada la marca (Órdenes → «Factura» → «Ya se facturó»), con folio o UUID opcional. Quitar la marca pide motivo y queda en bitácora.
+- **Cancelar** una orden facturada no se permite: primero se cancela la factura en el SAT y la encargada quita la marca (si no, quedaría un CFDI vigente de un servicio no cobrado).
+- **Reporte**: Reportes → «Órdenes por facturar» (solo administrador; lleva RFC). Muestra las pendientes del periodo **y las de periodos anteriores que siguen sin facturar** (columna «Periodo»), con los datos fiscales y qué falta. Se exporta a Excel o PDF. También: filtro «Por facturar» en Órdenes.
+- No se valida el dígito verificador del RFC ni que el régimen corresponda a persona física o moral: eso lo rechaza el facturador al timbrar.
 
 ## Reglas de negocio principales
 
@@ -102,4 +126,7 @@ de pruebas (variables `OCEANICA_TEST_DB_HOST/PORT/USER/PASSWORD/NAME`; por defec
 ## Límites conocidos
 
 - La impresión directa ESC/POS (`tickets.imprimir_texto`) depende de Windows + pywin32 y no se ha probado con una impresora real.
+  En modo RAW, Windows no avisa si la impresora no tiene papel: el ticket puede «imprimirse» sin salir.
+- `construir_exe.bat`, `Oceanica.exe`, `OceanicaAdmin.exe` y el instalador no se han verificado en Windows en esta versión (no hubo acceso a Windows).
+- Etiquetas y código de barras: pendiente de confirmar con el cliente (ver issue en el repositorio). No está construido.
 - Nómina no es fiscal: no sustituye CFDI ni obligaciones de IMSS/SAT.

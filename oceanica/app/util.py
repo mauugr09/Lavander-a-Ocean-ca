@@ -60,12 +60,13 @@ def seguro(parent, fn, *args, **kwargs):
         return True, fn(*args, **kwargs)
     except (ErrorNegocio, ErrorAcceso, ValueError) as e:
         QMessageBox.warning(parent, "Oceánica", str(e))
-    except mysql.connector.Error as e:
+    except mysql.connector.Error:
+        # El texto del conector (códigos, SQL, nombres de tablas) va solo al registro, no a la pantalla.
         log.exception("Error de base de datos")
         QMessageBox.critical(parent, "Oceánica",
                              "No se pudo completar la operación por un problema con la base de datos.\n"
-                             "Revisa que el servicio de MariaDB/MySQL esté encendido y vuelve a intentar.\n\n"
-                             f"Detalle: {e}")
+                             "Revisa que el servicio de MariaDB/MySQL esté encendido y vuelve a intentar.\n"
+                             "Si se repite, avisa a la encargada: el detalle quedó en la carpeta logs.")
     except Exception:
         log.exception("Error inesperado")
         QMessageBox.critical(parent, "Oceánica", "Ocurrió un error inesperado. Quedó registrado en la carpeta logs.")

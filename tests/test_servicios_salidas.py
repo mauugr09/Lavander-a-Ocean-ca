@@ -148,8 +148,9 @@ def test_ticket_de_corte(conn, empleado, negocio):
 
 
 def test_imprimir_sin_windows_da_error_claro():
-    with pytest.raises(tickets.ErrorImpresion, match="pywin32"):
+    with pytest.raises(tickets.ErrorImpresion, match="PDF") as e:
         tickets.imprimir_texto("hola")
+    assert "pywin32" not in str(e.value) and "pip" not in str(e.value)  # sin texto técnico para el empleado
 
 
 def test_recibo_de_nomina(conn, admin, tmp_path):
