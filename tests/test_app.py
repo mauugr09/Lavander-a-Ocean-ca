@@ -614,3 +614,24 @@ def test_clientes_explica_lista_vacia(qapp, conn, admin):
     assert v.tabla.rowCount() == 1 and v.tabla.item(0, 3).text() == "ABC010203XY1" and v.lb_vacio.text() == ""
     v.buscar.setText("zzz")
     assert "Ningún cliente coincide" in v.lb_vacio.text()
+
+
+def test_botones_de_qt_en_espanol(qapp):
+    from PySide6.QtWidgets import QDialogButtonBox
+    bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    assert bb.button(QDialogButtonBox.Cancel).text().replace("&", "") == "Cancelar"
+
+
+def test_reporte_ancho_no_corta_columnas(qapp, conn, admin):
+    from PySide6.QtWidgets import QHeaderView
+    from oceanica.app import v_reportes
+    ctx = Contexto(conn)
+    ctx.admin = admin
+    vista = v_reportes.ReportesView(ctx)
+    vista.al_mostrar()
+    vista.selector.setCurrentText("Órdenes por facturar")
+    h = vista.tabla.horizontalHeader()
+    assert all(h.sectionResizeMode(i) == QHeaderView.ResizeToContents for i in range(vista.tabla.columnCount()))
+    vista.selector.setCurrentText("Ventas por día")
+    assert h.sectionResizeMode(0) == QHeaderView.Stretch
+    vista.close()

@@ -185,8 +185,9 @@ class ReportesView(QWidget):
                 it.setFont(f)
                 self.tabla.setItem(r, c, it)
         h = self.tabla.horizontalHeader()
+        ancho = len(cols) > 8  # reportes anchos (por facturar): cada columna a su contenido, con barra horizontal
         for i in range(len(cols)):
-            h.setSectionResizeMode(i, QHeaderView.Stretch if i == 0 else QHeaderView.ResizeToContents)
+            h.setSectionResizeMode(i, QHeaderView.Stretch if i == 0 and not ancho else QHeaderView.ResizeToContents)
 
     def exportar(self):
         if not self.reporte:

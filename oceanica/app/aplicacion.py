@@ -7,6 +7,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import mysql.connector
+from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -27,9 +28,23 @@ def _configurar_log() -> None:
     logging.getLogger("oceanica").setLevel(logging.INFO)
 
 
+def _traducir_qt(app: QApplication) -> None:
+    """Botones estándar de Qt en español («Aceptar», «Cancelar») en lugar de «OK», «Cancel»."""
+    if getattr(app, "_traductor_es", None):
+        return
+    QLocale.setDefault(QLocale(QLocale.Spanish, QLocale.Mexico))
+    t = QTranslator(app)
+    if t.load(QLocale(QLocale.Spanish), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.TranslationsPath)):
+        app.installTranslator(t)
+        app._traductor_es = t
+    else:  # sin el archivo de traducción la aplicación funciona igual, solo con botones en inglés
+        logging.getLogger("oceanica").warning("No se encontró la traducción de Qt al español (qtbase_es.qm)")
+
+
 def preparar_aplicacion() -> QApplication:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("Oceánica Gestión")
+    _traducir_qt(app)
     app.setStyle("Fusion")
     app.setFont(QFont("Segoe UI", 10))
     app.setStyleSheet(tema.HOJA_ESTILO)

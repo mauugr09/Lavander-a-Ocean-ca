@@ -15,7 +15,7 @@ La aplicación de escritorio (PySide6) se inicia con `python -m oceanica`. Regla
 | `oceanica/seguridad.py` | bcrypt, política de contraseñas, bloqueo tras 5 intentos (15 min), bitácora |
 | `oceanica/app/` | Aplicación de escritorio PySide6: login, mostrador, órdenes, caja, asistencia, clientes y, para el administrador, inventario (también en mostrador), reportes con exportación a Excel/PDF, servicios y precios, empleados y PIN, transferencias y configuración |
 | `oceanica/servicios/` | Reglas de negocio: usuarios, configuración, clientes, catálogo, caja, órdenes, facturación (sin timbrado), inventario, empleados, nómina, reportes, exportación, tickets, carga inicial |
-| `tests/` | 153 pruebas (esquema, seguridad, servicios contra base real y pantallas con Qt `offscreen`) |
+| `tests/` | 155 pruebas (esquema, seguridad, servicios contra base real y pantallas con Qt `offscreen`) |
 
 ## Notas de actualización
 
