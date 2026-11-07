@@ -1,0 +1,8 @@
+config.ini
+respaldos/
+logs/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+tickets/
