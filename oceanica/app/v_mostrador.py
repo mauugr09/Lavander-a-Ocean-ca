@@ -192,8 +192,8 @@ class MostradorView(QWidget):
         dl.addWidget(self.obs)
         # ---- ¿cómo se entrega? recoge en mostrador o servicio a domicilio (con cargo extra)
         fila_e = QHBoxLayout()
-        self.b_recoge = poner(QPushButton("Recoge en mostrador"), "building-store")
-        self.b_domicilio = poner(QPushButton("Servicio a domicilio"), "truck-delivery")
+        self.b_recoge = poner(QPushButton("Recoge aquí"), "building-store")
+        self.b_domicilio = poner(QPushButton("A domicilio"), "truck-delivery")
         for b in (self.b_recoge, self.b_domicilio):
             b.setCheckable(True)
             b.setMinimumHeight(46)
