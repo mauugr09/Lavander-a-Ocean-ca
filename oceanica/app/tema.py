@@ -47,5 +47,6 @@ QFrame#barra {{ background: white; border-bottom: 1px solid {BORDE}; }}
 QTabWidget::pane {{ border: 1px solid {BORDE}; background: white; border-radius: 6px; }}
 QTabBar::tab {{ padding: 10px 20px; background: #E8F1F8; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; }}
 QTabBar::tab:selected {{ background: white; font-weight: 600; color: {PRIMARIO}; }}
+QTextBrowser, QTextEdit {{ background: white; color: {TEXTO}; border: none; }}
 QToolTip {{ background: white; color: {TEXTO}; border: 1px solid {BORDE}; }}
 """
