@@ -5,14 +5,14 @@ from datetime import datetime
 from decimal import Decimal
 from html import escape
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton, QTextBrowser,
                                QVBoxLayout, QWidget)
 
 from ..servicios import caja, configuracion, ordenes, tickets
 from . import tema
-from .dialogos import CobroDialog, TicketDialog
+from .cobro import CobroDialog
+from .dialogos import TicketDialog
 from .iconos import en_buscador, poner
 from .util import (ESTADOS, cantidad_txt, crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, poblar, seguro,
                    tarjeta)

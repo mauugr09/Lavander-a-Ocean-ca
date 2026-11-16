@@ -1,7 +1,7 @@
 """Transferencias por confirmar contra el banco (administrador)."""
 from __future__ import annotations
 
-from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QPushButton, QVBoxLayout, QWidget
 
 from ..servicios import caja
 from .util import crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, poblar, seguro

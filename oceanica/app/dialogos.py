@@ -11,7 +11,6 @@ from ..seguridad import ErrorAcceso, autenticar_pin
 from ..servicios import tickets, usuarios
 from .botones import Teclado
 from .iconos import poner
-from .cobro import CobroDialog  # noqa: F401  (se usa desde las pantallas como dialogos.CobroDialog)
 from .tema import PRIMARIO
 from .util import etiqueta, seguro
 

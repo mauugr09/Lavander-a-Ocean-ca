@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import textwrap
-from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -15,7 +14,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from ..config import CARPETA_PROGRAMA
 from . import caja, configuracion, nomina, ordenes
-from .comunes import ErrorNegocio, requerir_rol
+from .comunes import requerir_rol
 from .exportacion import formatear
 
 
@@ -64,9 +63,6 @@ def _encabezado(conn, ancho: int) -> list[str]:
 def _titulo(texto: str, ancho: int) -> list[str]:
     return ["=" * ancho, *_centrado(texto, ancho), "=" * ancho]
 
-
-def _fecha_corta(valor) -> str:
-    return valor.strftime("%d/%m/%Y") if valor else ""
 
 
 def _columnas_detalle(ancho: int) -> tuple[int, int, int, int, int]:

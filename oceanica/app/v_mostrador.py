@@ -18,7 +18,8 @@ from .botones import COLORES, BotonGrande, KilosDialog, es_categoria_kilo, icono
 from . import tema
 from .carrito import Carrito
 from .iconos import en_buscador, icono, poner
-from .dialogos import ClienteDialog, CobroDialog, TicketDialog
+from .cobro import CobroDialog
+from .dialogos import ClienteDialog, TicketDialog
 from .util import a_decimal, cantidad_txt, chip, crear_tabla, dinero, etiqueta, poblar, seguro, tarjeta
 
 DETALLE_KILO = "Playeras, ropa interior, sudaderas, pantalones y sábanas"

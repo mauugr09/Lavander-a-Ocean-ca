@@ -1,10 +1,8 @@
 """Caja: apertura, movimientos, corte y cierre."""
 from __future__ import annotations
 
-from decimal import Decimal
 
-from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget)
 
 from .iconos import poner
 from ..servicios import caja, tickets

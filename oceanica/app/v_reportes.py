@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QComboBox, QDateEdit, QFileDialog, QGridLayout, Q
                                QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from ..servicios import exportacion, reportes
-from .util import crear_tabla, dinero, etiqueta, seguro, tarjeta
+from .util import dinero, etiqueta, seguro, tarjeta
 
 # (título, función, ¿usa rango de fechas?)
 REPORTES = [

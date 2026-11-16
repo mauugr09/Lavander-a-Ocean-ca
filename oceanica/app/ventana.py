@@ -176,7 +176,6 @@ class Ventana(QMainWindow):
             else:
                 chip(self.chip_caja, "Caja cerrada", "chip_alerta")
             if self.ctx.es_admin:
-                from ..seguridad import ErrorAcceso  # noqa: F401
                 n = len(caja.listar_transferencias_pendientes(self.ctx.conn, self.ctx.admin))
                 for i, p in enumerate(self.paginas):
                     if p.titulo == "Transferencias":

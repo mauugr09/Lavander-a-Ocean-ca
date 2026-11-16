@@ -5,14 +5,13 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPainter, QPixmap
-from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QStyle,
-                               QStyleOption, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QStyle, QStyleOption,
+                               QVBoxLayout, QWidget)
 
 from .burbujas import Burbujas
 from .iconos import poner
 from ..seguridad import ErrorAcceso, iniciar_sesion
 from ..servicios import usuarios
-from ..servicios.comunes import ErrorNegocio
 from .util import etiqueta, seguro, tarjeta
 
 RECURSOS = Path(__file__).parent / "recursos"

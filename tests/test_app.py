@@ -7,10 +7,9 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QMessageBox  # noqa: E402
 
-from oceanica.app import dialogos  # noqa: E402
+from oceanica.app import cobro, dialogos  # noqa: E402
 from oceanica.app.aplicacion import preparar_aplicacion  # noqa: E402
 from oceanica.app.carrito import Carrito  # noqa: E402
 from oceanica.app.contexto import Contexto  # noqa: E402
@@ -76,7 +75,7 @@ def _sin_dialogos(monkeypatch, pago=None):
     def cobro_exec(self):
         self.pago = pago
         return True
-    monkeypatch.setattr(dialogos.CobroDialog, "exec", cobro_exec)
+    monkeypatch.setattr(cobro.CobroDialog, "exec", cobro_exec)
     monkeypatch.setattr(dialogos.TicketDialog, "exec", lambda self: 1)
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: pytest.fail(f"Advertencia inesperada: {a[2]}"))
@@ -217,7 +216,7 @@ def test_cobro_dialog_reglas(qapp, conn, mundo):
     ef = [m for m in caja.listar_metodos(conn) if m["es_efectivo"]][0]["id"]
     tr = [m for m in caja.listar_metodos(conn) if m["requiere_confirmacion"]][0]["id"]
     # paga solo una parte: no puede ser más que el saldo
-    d = dialogos.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
+    d = cobro.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
     assert not d.b_despues.isVisibleTo(d)              # «al recoger» solo existe al crear la orden
     d.elegir_modo("parte")
     assert d.pila.currentIndex() == P_PARTE
@@ -238,7 +237,7 @@ def test_cobro_dialog_reglas(qapp, conn, mundo):
     d._aceptar()
     assert d.pago == {"metodo_pago_id": ef, "monto": D("40.00"), "referencia": None}
     # transferencia: exige la captura o la clave de rastreo
-    t = dialogos.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
+    t = cobro.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
     t.elegir_modo("todo")
     t.elegir_metodo(tr)
     t._aceptar()
@@ -247,11 +246,11 @@ def test_cobro_dialog_reglas(qapp, conn, mundo):
     t._aceptar()
     assert t.pago == {"metodo_pago_id": tr, "monto": D("100"), "referencia": "MBAN1"}
     # al crear la orden se puede dejar todo para cuando recoja
-    e = dialogos.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
+    e = cobro.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
     e.elegir_modo("despues")
     assert e.pago is None and e.result() == 1
     # «Atrás» regresa al paso anterior
-    a = dialogos.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
+    a = cobro.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
     a.elegir_modo("todo")
     a.atras()
     assert a.pila.currentIndex() == 0
@@ -384,7 +383,7 @@ def test_entrega_con_transferencia_por_confirmar_pide_a_la_encargada(qapp, conn,
 def test_cobro_con_transferencia_acepta_captura_de_pantalla(qapp, conn, mundo):
     ctx = Contexto(conn)
     tr = [m for m in caja.listar_metodos(conn) if m["requiere_confirmacion"]][0]["id"]
-    dlg = dialogos.CobroDialog(ctx, None, D("100"), "Cobrar", permite_cero=False)
+    dlg = cobro.CobroDialog(ctx, None, D("100"), "Cobrar", permite_cero=False)
     dlg.elegir_modo("todo")
     dlg.elegir_metodo(tr)
     dlg._aceptar()
@@ -397,7 +396,7 @@ def test_cobro_con_transferencia_acepta_captura_de_pantalla(qapp, conn, mundo):
 def test_nomina_por_pantalla_de_la_semana_al_recibo(qapp, conn, admin, mundo, monkeypatch, tmp_path):
     from datetime import date, datetime, timedelta
     from oceanica.app import v_nomina
-    from oceanica.servicios import empleados, nomina
+    from oceanica.servicios import empleados
     _sin_dialogos(monkeypatch)
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     monkeypatch.setattr(v_nomina, "RAIZ", tmp_path)

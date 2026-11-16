@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QUrl
 from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox,
                                QPushButton, QRadioButton, QVBoxLayout, QWidget)

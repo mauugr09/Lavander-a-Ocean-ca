@@ -139,9 +139,6 @@ def destacados(reporte: dict) -> list[tuple[str, str]]:
     return tiles[:4]
 
 
-def _float(v) -> float:
-    return float(Decimal(v or 0))
-
 
 # ---------- PDF ---------------------------------------------------------------------
 

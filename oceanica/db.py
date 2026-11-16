@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import re
 import sys
 from contextlib import contextmanager
@@ -12,11 +13,8 @@ import mysql.connector
 
 from .config import CARPETA_MIGRACIONES, ConfigDB, cargar_config
 
-try:
-    import _mysql_connector  # noqa: F401  (extensión de C del conector)
-    _HAY_EXTENSION_C = True
-except ImportError:
-    _HAY_EXTENSION_C = False
+# La extensión de C del conector no existe en algunas plataformas (por ejemplo, Python para Windows ARM64).
+_HAY_EXTENSION_C = importlib.util.find_spec("_mysql_connector") is not None
 
 
 def conectar(cfg: ConfigDB | None = None):

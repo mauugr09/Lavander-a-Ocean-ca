@@ -1,5 +1,4 @@
 """Integración: clientes, catálogo, órdenes, caja e inventario contra una base real."""
-from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
