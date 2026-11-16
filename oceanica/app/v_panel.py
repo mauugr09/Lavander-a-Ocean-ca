@@ -4,8 +4,12 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from PySide6.QtCharts import (QBarCategoryAxis, QBarSet, QChart, QChartView, QHorizontalBarSeries, QLineSeries,
-                              QPieSeries, QStackedBarSeries, QValueAxis)
+try:  # Qt Charts viene en PySide6-Addons; si falta, el resto del sistema sigue funcionando
+    from PySide6.QtCharts import (QBarCategoryAxis, QBarSet, QChart, QChartView, QHorizontalBarSeries, QLineSeries,
+                                  QPieSeries, QStackedBarSeries, QValueAxis)
+    HAY_GRAFICAS = True
+except ImportError:
+    HAY_GRAFICAS = False
 from PySide6.QtCore import QMargins, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
@@ -148,6 +152,19 @@ class PanelView(QWidget):
         self.ctx = ctx
         raiz = QVBoxLayout(self)
         raiz.setContentsMargins(0, 0, 0, 0)
+        if not HAY_GRAFICAS:
+            aviso = tarjeta()
+            al = QVBoxLayout(aviso)
+            al.setContentsMargins(24, 24, 24, 24)
+            al.addWidget(etiqueta("Panel del negocio", "titulo"))
+            al.addWidget(etiqueta("Para ver las gráficas falta instalar un componente de PySide6. En la carpeta del "
+                                  "programa ejecute:\n\n    python -m pip install --upgrade PySide6\n\n"
+                                  "y vuelva a abrir el sistema. Mientras tanto, las cifras están en «Reportes».",
+                                  palabra=True))
+            al.addStretch(1)
+            raiz.setContentsMargins(16, 16, 16, 16)
+            raiz.addWidget(aviso)
+            return
         area = QScrollArea()
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.NoFrame)
@@ -234,6 +251,8 @@ class PanelView(QWidget):
 
     # ------------------------------------------------------------------ datos
     def al_mostrar(self):
+        if not HAY_GRAFICAS:
+            return
         hoy = date.today()
         ok, r = seguro(self, panel.resumen, self.ctx.conn, hoy)
         if ok:
