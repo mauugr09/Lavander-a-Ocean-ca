@@ -6,7 +6,7 @@ import sys
 from PyInstaller.utils.hooks import collect_submodules
 
 ocultos = collect_submodules("mysql.connector") + ["oceanica.migrar", "oceanica.configurar", "oceanica.init_db", "oceanica.respaldos", "bcrypt", "reportlab.graphics.barcode.code128",
-                                                        "PySide6.QtCharts", "PySide6.QtSvg"]
+                                                        "PySide6.QtSvg"]
 if sys.platform == "win32":
     ocultos += ["win32print", "win32timezone"]
 
@@ -16,7 +16,7 @@ a = Analysis(
     datas=[("db/migrations", "db/migrations"), ("oceanica/app/recursos", "oceanica/app/recursos")],
     hiddenimports=ocultos,
     excludes=["tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore", "PySide6.QtQuick",
-              "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtDataVisualization"],
+              "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtCharts", "PySide6.QtDataVisualization"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

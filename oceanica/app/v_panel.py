@@ -4,24 +4,18 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-try:  # Qt Charts viene en PySide6-Addons; si falta, el resto del sistema sigue funcionando
-    from PySide6.QtCharts import (QBarCategoryAxis, QBarSet, QChart, QChartView, QHorizontalBarSeries, QLineSeries,
-                                  QPieSeries, QStackedBarSeries, QValueAxis)
-    HAY_GRAFICAS = True
-except ImportError:
-    HAY_GRAFICAS = False
-from PySide6.QtCore import QMargins, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
                                QStackedLayout, QVBoxLayout, QWidget)
 
 from ..servicios import panel, reportes
 from . import tema
+from .graficas import Barras, BarrasHorizontales, Dona, Lineas
 from .iconos import en_etiqueta, poner
 from .util import dinero, etiqueta, seguro, tarjeta
 
 PERIODOS = [("Este mes", "mes"), ("Últimos 3 meses", "trimestre"), ("Este año", "anio")]
-COLORES_PASTEL = ["#0B3C9E", "#1AA6C8", "#7B3FA0", "#1E8E5A", "#B86E00", "#5B6F86"]
+COLORES_PAGO = ["#0B3C9E", "#1AA6C8", "#7B3FA0", "#1E8E5A", "#B86E00", "#5B6F86"]
 
 
 def _rango_periodo(clave: str, hoy: date) -> tuple[date, date]:
@@ -39,68 +33,43 @@ def _f(v) -> float:
     return float(Decimal(v or 0))
 
 
-def _fuente(tam: float, negrita: bool = False) -> QFont:
-    f = QFont()
-    f.setPointSizeF(tam)
-    f.setBold(negrita)
-    return f
-
-
-def _nueva_grafica() -> QChart:
-    g = QChart()
-    g.setBackgroundVisible(False)
-    g.setMargins(QMargins(4, 4, 4, 4))
-    g.legend().setVisible(False)
-    g.setAnimationOptions(QChart.NoAnimation)
-    return g
-
-
-def _eje_dinero(maximo: float) -> QValueAxis:
-    eje = QValueAxis()
-    eje.setRange(0, max(maximo * 1.15, 100))
-    eje.setLabelFormat("$%.0f")
-    eje.applyNiceNumbers()
-    eje.setLabelsFont(_fuente(10))
-    eje.setGridLineColor(QColor("#E3ECF4"))
-    return eje
-
-
 class Grafica(QFrame):
     """Tarjeta con título, subtítulo y la gráfica (o un aviso si no hay datos)."""
 
-    def __init__(self, titulo: str, alto: int = 320):
+    def __init__(self, titulo: str, alto: int = 300):
         super().__init__()
         self.setProperty("rol", "tarjeta")
+        self.alto = alto
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 14, 16, 12)
-        lay.setSpacing(2)
+        lay.setSpacing(6)
         lay.addWidget(etiqueta(titulo, "subtitulo"))
         self.sub = etiqueta("", "suave", True)
         lay.addWidget(self.sub)
-        self.vista = QChartView(self)
-        self.vista.setRenderHint(QPainter.Antialiasing)
-        self.vista.setMinimumHeight(alto)
-        self.vista.setStyleSheet("background: transparent;")
+        self.pila = QStackedLayout()
+        lay.addLayout(self.pila)  # primero se instala el contenedor: así nada se muestra como ventana suelta
         self.vacio = etiqueta("Todavía no hay ventas en este periodo.", "suave")
         self.vacio.setParent(self)
         self.vacio.setAlignment(Qt.AlignCenter)
         self.vacio.setMinimumHeight(alto)
-        self.pila = QStackedLayout()
-        lay.addLayout(self.pila)  # primero se instala el contenedor: así nada se muestra como ventana suelta
-        self.pila.addWidget(self.vista)
         self.pila.addWidget(self.vacio)
+        self.actual: QWidget | None = None
 
-    def mostrar(self, grafica: QChart | None, subtitulo: str = ""):
+    def mostrar(self, grafica: QWidget | None, subtitulo: str = ""):
         self.sub.setText(subtitulo)
         self.sub.setVisible(bool(subtitulo))
+        if self.actual is not None:
+            self.pila.removeWidget(self.actual)
+            self.actual.deleteLater()
+            self.actual = None
         if grafica is None:
             self.pila.setCurrentWidget(self.vacio)
             return
-        vieja = self.vista.chart()
-        self.vista.setChart(grafica)
-        if vieja is not None:
-            vieja.deleteLater()
-        self.pila.setCurrentWidget(self.vista)
+        grafica.setParent(self)
+        grafica.setMinimumHeight(max(grafica.minimumHeight(), 120))
+        self.pila.addWidget(grafica)
+        self.pila.setCurrentWidget(grafica)
+        self.actual = grafica
 
 
 class Indicador(QFrame):
@@ -152,19 +121,6 @@ class PanelView(QWidget):
         self.ctx = ctx
         raiz = QVBoxLayout(self)
         raiz.setContentsMargins(0, 0, 0, 0)
-        if not HAY_GRAFICAS:
-            aviso = tarjeta()
-            al = QVBoxLayout(aviso)
-            al.setContentsMargins(24, 24, 24, 24)
-            al.addWidget(etiqueta("Panel del negocio", "titulo"))
-            al.addWidget(etiqueta("Para ver las gráficas falta instalar un componente de PySide6. En la carpeta del "
-                                  "programa ejecute:\n\n    python -m pip install --upgrade PySide6\n\n"
-                                  "y vuelva a abrir el sistema. Mientras tanto, las cifras están en «Reportes».",
-                                  palabra=True))
-            al.addStretch(1)
-            raiz.setContentsMargins(16, 16, 16, 16)
-            raiz.addWidget(aviso)
-            return
         area = QScrollArea()
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.NoFrame)
@@ -220,9 +176,9 @@ class PanelView(QWidget):
 
         rej = QGridLayout()
         rej.setSpacing(12)
-        self.g_clientes = Grafica("Clientes más frecuentes", 300)
-        self.g_servicios = Grafica("Servicios que más venden", 300)
-        self.g_pagos = Grafica("Cómo pagan los clientes", 300)
+        self.g_clientes = Grafica("Clientes más frecuentes", 280)
+        self.g_servicios = Grafica("Servicios que más venden", 280)
+        self.g_pagos = Grafica("Cómo pagan los clientes", 260)
         self.g_datos = tarjeta()
         dl = QVBoxLayout(self.g_datos)
         dl.setContentsMargins(16, 14, 16, 14)
@@ -251,8 +207,6 @@ class PanelView(QWidget):
 
     # ------------------------------------------------------------------ datos
     def al_mostrar(self):
-        if not HAY_GRAFICAS:
-            return
         hoy = date.today()
         ok, r = seguro(self, panel.resumen, self.ctx.conn, hoy)
         if ok:
@@ -272,14 +226,10 @@ class PanelView(QWidget):
         d, h = _rango_periodo(self.periodo.currentData(), date.today())
         ok, cli = seguro(self, panel.clientes_top, self.ctx.conn, d, h)
         if ok:
-            self._barras_horizontales(self.g_clientes, [c["cliente"] for c in cli], [c["ordenes"] for c in cli],
-                                      tema.PRIMARIO, (f"Por número de visitas. {cli[0]['cliente']} ha gastado "
-                                                      f"{dinero(cli[0]['total'])} en el periodo.") if cli else "",
-                                      formato="@value visitas", dinero_eje=False)
+            self._clientes(cli)
         ok, serv = seguro(self, panel.servicios_top, self.ctx.conn, d, h)
         if ok:
-            self._barras_horizontales(self.g_servicios, [s["servicio"] for s in serv], [s["importe"] for s in serv],
-                                      tema.SECUNDARIO, f"El que más deja: {serv[0]['servicio']}" if serv else "")
+            self._servicios(serv)
         ok, pagos = seguro(self, panel.cobros_por_metodo, self.ctx.conn, d, h)
         if ok:
             self._dona(pagos)
@@ -297,127 +247,53 @@ class PanelView(QWidget):
         if mejor is None:
             self.g_meses.mostrar(None)
             return
-        normal, destacado = QBarSet("Ventas"), QBarSet("Mejor mes")
-        normal.setColor(QColor(tema.PRIMARIO))
-        normal.setBorderColor(QColor(tema.PRIMARIO))
-        destacado.setColor(QColor(tema.OK))
-        destacado.setBorderColor(QColor(tema.OK))
-        for m in meses:
-            es = m is mejor
-            normal.append(0 if es else _f(m["vendido"]))
-            destacado.append(_f(m["vendido"]) if es else 0)
-        serie = QStackedBarSeries()
-        serie.append(normal)
-        serie.append(destacado)
-        serie.setBarWidth(0.6)
-        g = _nueva_grafica()
-        g.addSeries(serie)
-        x = QBarCategoryAxis()
-        x.append([panel.MESES[m["mes"].month - 1] for m in meses])
-        x.setLabelsFont(_fuente(9.5))
-        x.setGridLineVisible(False)
-        g.addAxis(x, Qt.AlignBottom)
-        serie.attachAxis(x)
-        y = _eje_dinero(max(_f(m["vendido"]) for m in meses))
-        g.addAxis(y, Qt.AlignLeft)
-        serie.attachAxis(y)
+        etiquetas = [panel.MESES[m["mes"].month - 1] for m in meses]
+        detalles = [f"{panel.MESES_LARGOS[m['mes'].month - 1].capitalize()} {m['mes'].year}: "
+                    f"{dinero(m['vendido'])} en {m['ordenes']} órdenes" for m in meses]
+        g = Barras(etiquetas, [_f(m["vendido"]) for m in meses], detalles, meses.index(mejor))
         nombre = panel.MESES_LARGOS[mejor["mes"].month - 1]
         desde = meses[0]["mes"]
-        self.g_meses.mostrar(g, f"De {panel.MESES_LARGOS[desde.month - 1]} {desde.year} a hoy. Mejor mes: {nombre} {mejor['mes'].year} con {dinero(mejor['vendido'])} "
+        self.g_meses.mostrar(g, f"De {panel.MESES_LARGOS[desde.month - 1]} {desde.year} a hoy. Mejor mes: "
+                                f"{nombre} {mejor['mes'].year} con {dinero(mejor['vendido'])} "
                                 f"({mejor['ordenes']} órdenes), en verde.")
 
     def _grafica_avance(self, a: dict):
         if not a["actual"][-1] and not a["anterior"][-1]:
             self.g_avance.mostrar(None)
             return
-        g = _nueva_grafica()
-        actual, anterior = QLineSeries(), QLineSeries()
-        actual.setName(a["nombre_actual"].capitalize())
-        anterior.setName(a["nombre_anterior"].capitalize())
-        for dia, v in enumerate(a["anterior"], 1):
-            anterior.append(dia, _f(v))
-        for dia, v in enumerate(a["actual"], 1):
-            actual.append(dia, _f(v))
-        anterior.setPen(QPen(QColor("#9FB0C0"), 2, Qt.DashLine))
-        actual.setPen(QPen(QColor(tema.PRIMARIO), 3.5))
-        g.addSeries(anterior)
-        g.addSeries(actual)
-        x = QValueAxis()
-        x.setRange(1, 31)
-        x.setTickCount(7)
-        x.setLabelFormat("%d")
-        x.setTitleText("Día del mes")
-        x.setLabelsFont(_fuente(9.5))
-        x.setGridLineVisible(False)
-        y = _eje_dinero(max(_f(a["actual"][-1]), _f(a["anterior"][-1])))
-        for eje, lado in ((x, Qt.AlignBottom), (y, Qt.AlignLeft)):
-            g.addAxis(eje, lado)
-            actual.attachAxis(eje)
-            anterior.attachAxis(eje)
-        g.legend().setVisible(True)
-        g.legend().setAlignment(Qt.AlignBottom)
-        g.legend().setFont(_fuente(10))
+        g = Lineas([(a["nombre_anterior"].capitalize(), [_f(v) for v in a["anterior"]], "#9FB0C0", True),
+                    (a["nombre_actual"].capitalize(), [_f(v) for v in a["actual"]], tema.PRIMARIO, False)])
         hoy = len(a["actual"])
-        previo_mismo_dia = a["anterior"][min(hoy, len(a["anterior"])) - 1]
-        dif = a["actual"][-1] - previo_mismo_dia
-        texto = (f"Al día {hoy}: {dinero(a['actual'][-1])}, "
-                 + (f"{dinero(abs(dif))} {'más' if dif >= 0 else 'menos'} que {a['nombre_anterior']} a la misma fecha."))
-        self.g_avance.mostrar(g, texto)
+        previo = a["anterior"][min(hoy, len(a["anterior"])) - 1]
+        dif = a["actual"][-1] - previo
+        self.g_avance.mostrar(g, f"Al día {hoy}: {dinero(a['actual'][-1])}, {dinero(abs(dif))} "
+                                 f"{'más' if dif >= 0 else 'menos'} que {a['nombre_anterior']} a la misma fecha.")
 
-    def _barras_horizontales(self, caja: Grafica, nombres: list[str], valores: list, color: str, subtitulo: str,
-                             formato: str = "$@value", dinero_eje: bool = True):
-        if not nombres:
-            caja.mostrar(None)
+    def _clientes(self, cli: list[dict]):
+        if not cli:
+            self.g_clientes.mostrar(None)
             return
-        conjunto = QBarSet("")
-        conjunto.setColor(QColor(color))
-        conjunto.setBorderColor(QColor(color))
-        nombres, valores = nombres[::-1], valores[::-1]  # el primero arriba
-        for v in valores:
-            conjunto.append(_f(v))
-        conjunto.setLabelColor(QColor(tema.TEXTO))
-        serie = QHorizontalBarSeries()
-        serie.append(conjunto)
-        serie.setBarWidth(0.65)
-        serie.setLabelsVisible(True)
-        serie.setLabelsFormat(formato)
-        serie.setLabelsPosition(QHorizontalBarSeries.LabelsOutsideEnd)
-        g = _nueva_grafica()
-        g.addSeries(serie)
-        y = QBarCategoryAxis()
-        y.append([n if len(n) <= 34 else n[:33] + "…" for n in nombres])
-        y.setLabelsFont(_fuente(10))
-        y.setGridLineVisible(False)
-        g.addAxis(y, Qt.AlignLeft)
-        serie.attachAxis(y)
-        tope = max(_f(v) for v in valores)
-        if dinero_eje:
-            x = _eje_dinero(tope * 1.5)
-        else:
-            x = QValueAxis()
-            x.setRange(0, tope * 1.8)
-        x.setVisible(False)
-        g.addAxis(x, Qt.AlignBottom)
-        serie.attachAxis(x)
-        caja.mostrar(g, subtitulo)
+        items = [(c["cliente"], c["ordenes"], f"{c['ordenes']} visitas",
+                  f"{c['cliente']}: {c['ordenes']} visitas, {dinero(c['total'])} gastados") for c in cli]
+        self.g_clientes.mostrar(BarrasHorizontales(items, tema.PRIMARIO),
+                                f"Por número de visitas. {cli[0]['cliente']} ha gastado {dinero(cli[0]['total'])} "
+                                "en el periodo. Pase el mouse sobre un nombre para ver lo que gastó.")
+
+    def _servicios(self, serv: list[dict]):
+        if not serv:
+            self.g_servicios.mostrar(None)
+            return
+        items = []
+        for s_ in serv:
+            cant = f"{s_['cantidad']:,.1f} kg" if s_["unidad"] == "kilo" else f"{int(s_['cantidad'])} piezas"
+            items.append((s_["servicio"], _f(s_["importe"]), dinero(s_["importe"]), f"{s_['servicio']}: {cant}"))
+        self.g_servicios.mostrar(BarrasHorizontales(items, tema.SECUNDARIO),
+                                 f"El que más deja: {serv[0]['servicio']}")
 
     def _dona(self, pagos: list[dict]):
         total = sum((p["total"] for p in pagos), Decimal(0))
         if not total:
             self.g_pagos.mostrar(None)
             return
-        serie = QPieSeries()
-        serie.setHoleSize(0.5)
-        for i, p in enumerate(pagos):
-            pct = p["total"] * 100 / total
-            r = serie.append(f"{p['metodo']}  {pct:.0f}%", _f(p["total"]))
-            r.setColor(QColor(COLORES_PASTEL[i % len(COLORES_PASTEL)]))
-            r.setBorderColor(QColor("white"))
-            r.setLabelFont(_fuente(10.5))
-            r.setLabelVisible(True)
-            r.setLabelPosition(r.LabelPosition.LabelOutside)
-            r.setLabelArmLengthFactor(0.12)
-        serie.setPieSize(0.62)
-        g = _nueva_grafica()
-        g.addSeries(serie)
-        self.g_pagos.mostrar(g, f"Cobrado en el periodo: {dinero(total)}")
+        items = [(p["metodo"], _f(p["total"]), COLORES_PAGO[i % len(COLORES_PAGO)]) for i, p in enumerate(pagos)]
+        self.g_pagos.mostrar(Dona(items), f"Cobrado en el periodo: {dinero(total)}")
