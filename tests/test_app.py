@@ -200,22 +200,50 @@ def test_pin_dialog_valida_y_bloquea(qapp, conn, mundo):
 
 
 def test_cobro_dialog_reglas(qapp, conn, mundo):
+    from oceanica.app.cobro import P_EFECTIVO, P_METODO, P_PARTE, sugerencias_billetes
     ctx = Contexto(conn)
+    ef = [m for m in caja.listar_metodos(conn) if m["es_efectivo"]][0]["id"]
+    tr = [m for m in caja.listar_metodos(conn) if m["requiere_confirmacion"]][0]["id"]
+    # paga solo una parte: no puede ser más que el saldo
     d = dialogos.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
-    d.monto.setText("150")
+    assert not d.b_despues.isVisibleTo(d)              # «al recoger» solo existe al crear la orden
+    d.elegir_modo("parte")
+    assert d.pila.currentIndex() == P_PARTE
+    d.teclado_parte.pantalla.setText("150")
+    d.confirmar_parte()
+    assert "No puede ser más" in d.msg.text()
+    d.teclado_parte.pantalla.setText("40")
+    assert "60.00" in d.lb_resto.text()
+    d.confirmar_parte()
+    assert d.pila.currentIndex() == P_METODO
+    d.elegir_metodo(ef)
+    assert d.pila.currentIndex() == P_EFECTIVO
+    d.recibido.setText("20")
     d._aceptar()
-    assert d.pago is None and "mayor" in d.msg.text()
-    tr = [m for m in d.metodos.values() if m["requiere_confirmacion"]][0]
-    d.metodo.setCurrentIndex(d.metodo.findData(tr["id"]))
-    d.monto.setText("100")
+    assert d.pago is None and "menos" in d.msg.text()
+    d.recibido.setText("50")
+    assert d.lb_cambio.text() == "Cambio: $10.00"
     d._aceptar()
-    assert d.pago is None and "clave de rastreo" in d.msg.text()
-    d.referencia.setText("MBAN1")
-    d._aceptar()
-    assert d.pago == {"metodo_pago_id": tr["id"], "monto": D("100"), "referencia": "MBAN1"}
+    assert d.pago == {"metodo_pago_id": ef, "monto": D("40.00"), "referencia": None}
+    # transferencia: exige la captura o la clave de rastreo
+    t = dialogos.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
+    t.elegir_modo("todo")
+    t.elegir_metodo(tr)
+    t._aceptar()
+    assert t.pago is None and "captura" in t.msg.text()
+    t.referencia.setText("MBAN1")
+    t._aceptar()
+    assert t.pago == {"metodo_pago_id": tr, "monto": D("100"), "referencia": "MBAN1"}
+    # al crear la orden se puede dejar todo para cuando recoja
     e = dialogos.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
-    e._aceptar()  # sin monto = sin anticipo
+    e.elegir_modo("despues")
     assert e.pago is None and e.result() == 1
+    # «Atrás» regresa al paso anterior
+    a = dialogos.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
+    a.elegir_modo("todo")
+    a.atras()
+    assert a.pila.currentIndex() == 0
+    assert sugerencias_billetes(D("126")) == [D(150), D(200), D(500), D(1000)]
 
 
 def test_inventario_por_pantalla(qapp, conn, admin, empleado, mundo, monkeypatch):
@@ -342,20 +370,16 @@ def test_entrega_con_transferencia_por_confirmar_pide_a_la_encargada(qapp, conn,
 
 
 def test_cobro_con_transferencia_acepta_captura_de_pantalla(qapp, conn, mundo):
-    from decimal import Decimal
     ctx = Contexto(conn)
-    dlg = dialogos.CobroDialog(ctx, None, Decimal("100"), "Cobrar", permite_cero=False)
-    dlg.metodo.setCurrentIndex(dlg.metodo.findText("Transferencia"))
+    tr = [m for m in caja.listar_metodos(conn) if m["requiere_confirmacion"]][0]["id"]
+    dlg = dialogos.CobroDialog(ctx, None, D("100"), "Cobrar", permite_cero=False)
+    dlg.elegir_modo("todo")
+    dlg.elegir_metodo(tr)
     dlg._aceptar()
     assert dlg.pago is None and "captura" in dlg.msg.text().lower()   # sin comprobante no se acepta
     dlg.captura.setChecked(True)
     dlg._aceptar()
     assert dlg.pago["referencia"] == "CAPTURA DE PANTALLA"
-    dlg2 = dialogos.CobroDialog(ctx, None, Decimal("100"), "Cobrar", permite_cero=False)
-    dlg2.metodo.setCurrentIndex(dlg2.metodo.findText("Transferencia"))
-    dlg2.referencia.setText("MBAN9981")
-    dlg2._aceptar()
-    assert dlg2.pago["referencia"] == "MBAN9981"
 
 
 def test_nomina_por_pantalla_de_la_semana_al_recibo(qapp, conn, admin, mundo, monkeypatch, tmp_path):

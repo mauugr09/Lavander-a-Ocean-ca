@@ -295,7 +295,8 @@ class OrdenesView(QWidget):
                 QMessageBox.warning(self, "Oceánica", f"La orden tiene {dinero(o['pagado'])} cobrados. "
                                     "Solo el administrador puede reembolsar y cancelar.")
                 return
-            dlg = CobroDialog(self.ctx, self, o["pagado"], "Reembolso al cliente", permite_cero=False, texto_importe="Pagado")
+            dlg = CobroDialog(self.ctx, self, o["pagado"], "Reembolso al cliente", permite_cero=False, texto_importe="Pagado",
+                              reembolso=True)
             if not dlg.exec() or not dlg.pago:
                 return
             reembolso = dlg.pago

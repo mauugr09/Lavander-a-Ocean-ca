@@ -1,17 +1,16 @@
 """Diálogos reutilizables: identificación por PIN, cobro, cliente y vista de ticket."""
 from __future__ import annotations
 
-from decimal import Decimal
-
-from PySide6.QtCore import QRegularExpression, QUrl, Qt
+from PySide6.QtCore import QRegularExpression, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QRegularExpressionValidator
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLineEdit,
                                QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout)
 
 from ..config import RAIZ
 from ..seguridad import ErrorAcceso, autenticar_pin
-from ..servicios import caja, tickets, usuarios
-from .util import a_decimal, dinero, etiqueta, seguro
+from ..servicios import tickets, usuarios
+from .cobro import CobroDialog  # noqa: F401  (se usa desde las pantallas como dialogos.CobroDialog)
+from .util import etiqueta, seguro
 
 
 def _botones(dlg: QDialog, texto_ok: str = "Aceptar", primario: bool = True) -> QDialogButtonBox:
@@ -118,103 +117,6 @@ class AutorizacionDialog(QDialog):
             self.password.clear()
             return
         self.sesion = s
-        self.accept()
-
-
-class CobroDialog(QDialog):
-    """Captura de un pago. Resultado en self.pago = {'metodo_pago_id','monto','referencia'} o None (sin pago)."""
-
-    def __init__(self, ctx, parent, importe: Decimal, titulo: str, permite_cero: bool, texto_importe: str = "Total"):
-        super().__init__(parent)
-        self.pago, self.importe, self.permite_cero = None, Decimal(importe), permite_cero
-        self.setWindowTitle(titulo)
-        self.setModal(True)
-        self.setMinimumWidth(400)
-        self.metodos = {m["id"]: m for m in caja.listar_metodos(ctx.conn)}
-        lay = QVBoxLayout(self)
-        lay.setSpacing(10)
-        lay.addWidget(etiqueta(titulo, "subtitulo"))
-        lay.addWidget(etiqueta(f"{texto_importe}: {dinero(importe)}", "titulo"))
-        form = QFormLayout()
-        self.metodo = QComboBox()
-        for m in self.metodos.values():
-            self.metodo.addItem(m["nombre"], m["id"])
-        self.monto = QLineEdit("" if permite_cero else f"{importe:.2f}")
-        self.monto.setPlaceholderText("0.00")
-        self.todo = QPushButton("Pagar todo")
-        fila = QHBoxLayout()
-        fila.addWidget(self.monto, 1)
-        fila.addWidget(self.todo)
-        self.recibido = QLineEdit()
-        self.recibido.setPlaceholderText("Con cuánto paga")
-        self.cambio = etiqueta("", "subtitulo")
-        self.referencia = QLineEdit()
-        self.referencia.setPlaceholderText("Clave de rastreo (si la tiene)")
-        self.captura = QCheckBox("Me mostraron la captura de pantalla del comprobante")
-        form.addRow("Método", self.metodo)
-        form.addRow("Monto a cobrar", fila)
-        self.f_recibido = QLabel("Recibido")
-        form.addRow(self.f_recibido, self.recibido)
-        self.f_cambio = QLabel("Cambio")
-        form.addRow(self.f_cambio, self.cambio)
-        self.f_ref = QLabel("Clave de rastreo")
-        form.addRow(self.f_ref, self.referencia)
-        self.f_captura = QLabel("")
-        form.addRow(self.f_captura, self.captura)
-        lay.addLayout(form)
-        self.msg = etiqueta("", "error", True)
-        lay.addWidget(self.msg)
-        bb = _botones(self, "Cobrar" if not permite_cero else "Continuar")
-        bb.accepted.connect(self._aceptar)
-        lay.addWidget(bb)
-        self.todo.clicked.connect(lambda: (self.monto.setText(f"{self.importe:.2f}"), self.monto.setFocus()))
-        self.metodo.currentIndexChanged.connect(self._ajustar)
-        self.monto.textChanged.connect(self._calcular_cambio)
-        self.recibido.textChanged.connect(self._calcular_cambio)
-        self.monto.returnPressed.connect(self._aceptar)
-        self.recibido.returnPressed.connect(self._aceptar)
-        self.referencia.returnPressed.connect(self._aceptar)
-        self._ajustar()
-        self.monto.setFocus()
-
-    def _metodo(self) -> dict:
-        return self.metodos[self.metodo.currentData()]
-
-    def _ajustar(self):
-        m = self._metodo()
-        for w in (self.f_recibido, self.recibido, self.f_cambio, self.cambio):
-            w.setVisible(bool(m["es_efectivo"]))
-        for w in (self.f_ref, self.referencia, self.f_captura, self.captura):
-            w.setVisible(bool(m["requiere_confirmacion"]))
-        self._calcular_cambio()
-
-    def _calcular_cambio(self):
-        monto, recibido = a_decimal(self.monto.text()), a_decimal(self.recibido.text())
-        self.cambio.setText(dinero(recibido - monto) if monto is not None and recibido is not None and recibido >= monto else "—")
-
-    def _aceptar(self):
-        monto = a_decimal(self.monto.text()) if self.monto.text().strip() else Decimal(0)
-        if monto is None or monto < 0:
-            self.msg.setText("Escribe un monto válido.")
-            return
-        if monto > self.importe:
-            self.msg.setText(f"El monto no puede ser mayor a {dinero(self.importe)}.")
-            return
-        if monto == 0:
-            if not self.permite_cero:
-                self.msg.setText("El monto debe ser mayor que cero.")
-                return
-            self.pago = None
-            return self.accept()
-        m = self._metodo()
-        ref = self.referencia.text().strip()
-        if m["requiere_confirmacion"] and not ref and not self.captura.isChecked():
-            self.msg.setText("Pide la captura de pantalla del comprobante (o anota la clave de rastreo).")
-            self.referencia.setFocus()
-            return
-        if m["requiere_confirmacion"] and not ref:
-            ref = "CAPTURA DE PANTALLA"  # la encargada confirma después en el banco
-        self.pago = {"metodo_pago_id": m["id"], "monto": monto, "referencia": ref or None}
         self.accept()
 
 

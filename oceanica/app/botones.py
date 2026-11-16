@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy,
-                               QVBoxLayout)
+                               QVBoxLayout, QWidget)
 
 from .tema import PRIMARIO, PRIMARIO_OSCURO, SECUNDARIO, TEXTO, TEXTO_SUAVE
 from .util import a_decimal, dinero, etiqueta
@@ -104,6 +104,55 @@ class BotonGrande(QPushButton):
             lay.addWidget(self.lb_detalle)
 
 
+class Teclado(QWidget):
+    """Pantalla grande con teclado numérico táctil (también acepta el teclado de la computadora)."""
+
+    def __init__(self, inicial: str = "", prefijo: str = "", sufijo: str = "", alto_tecla: int = 60):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        fila = QHBoxLayout()
+        if prefijo:
+            lb = QLabel(prefijo)
+            lb.setStyleSheet("font-size: 24pt; font-weight: 600;")
+            fila.addWidget(lb)
+        self.pantalla = QLineEdit(inicial)
+        self.pantalla.setAlignment(Qt.AlignRight)
+        self.pantalla.setPlaceholderText("0")
+        self.pantalla.setStyleSheet("font-size: 28pt; font-weight: 700; padding: 6px 12px;")
+        fila.addWidget(self.pantalla, 1)
+        if sufijo:
+            lb = QLabel(sufijo)
+            lb.setStyleSheet("font-size: 20pt; font-weight: 600;")
+            fila.addWidget(lb)
+        lay.addLayout(fila)
+        rejilla = QGridLayout()
+        rejilla.setSpacing(8)
+        for i, t in enumerate(["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"]):
+            b = QPushButton(t)
+            b.setMinimumSize(80, alto_tecla)
+            b.setFocusPolicy(Qt.NoFocus)
+            b.setAccessibleName("Borrar" if t == "⌫" else t)
+            b.setStyleSheet("font-size: 20pt; font-weight: 600; border-radius: 10px;")
+            b.clicked.connect(lambda _=False, t=t: self.tecla(t))
+            rejilla.addWidget(b, i // 3, i % 3)
+        lay.addLayout(rejilla)
+
+    def tecla(self, t: str):
+        s = self.pantalla.text()
+        if t == "⌫":
+            s = s[:-1]
+        elif t == ".":
+            s = s if "." in s else (s or "0") + "."
+        elif len(s.replace(",", "")) < 8:
+            s += t
+        self.pantalla.setText(s)
+
+    def valor(self):
+        return a_decimal(self.pantalla.text())
+
+
 class KilosDialog(QDialog):
     """Teclado numérico grande para escribir los kilos que marcó la báscula."""
 
@@ -119,28 +168,9 @@ class KilosDialog(QDialog):
         lay.addWidget(etiqueta(f"🧺  {servicio['nombre']}", "subtitulo"))
         lay.addWidget(etiqueta(f"{dinero(self.precio)} por kilo · Pesa la ropa y escribe los kilos", "suave", True))
 
-        self.pantalla = QLineEdit("" if actual is None else format(actual.normalize(), "f"))
-        self.pantalla.setAlignment(Qt.AlignRight)
-        self.pantalla.setPlaceholderText("0")
-        self.pantalla.setStyleSheet("font-size: 30pt; font-weight: 700; padding: 6px 12px;")
-        fila = QHBoxLayout()
-        fila.addWidget(self.pantalla, 1)
-        kg = QLabel("kg")
-        kg.setStyleSheet("font-size: 20pt; font-weight: 600;")
-        fila.addWidget(kg)
-        lay.addLayout(fila)
-
-        rejilla = QGridLayout()
-        rejilla.setSpacing(8)
-        teclas = ["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"]
-        for i, t in enumerate(teclas):
-            b = QPushButton(t)
-            b.setMinimumSize(86, 64)
-            b.setFocusPolicy(Qt.NoFocus)
-            b.setStyleSheet("font-size: 20pt; font-weight: 600; border-radius: 10px;")
-            b.clicked.connect(lambda _=False, t=t: self._tecla(t))
-            rejilla.addWidget(b, i // 3, i % 3)
-        lay.addLayout(rejilla)
+        self.teclado = Teclado("" if actual is None else format(actual.normalize(), "f"), sufijo="kg")
+        self.pantalla = self.teclado.pantalla
+        lay.addWidget(self.teclado)
 
         self.lb_importe = etiqueta("", "titulo")
         self.lb_importe.setAlignment(Qt.AlignRight)
@@ -165,16 +195,6 @@ class KilosDialog(QDialog):
         self.pantalla.textChanged.connect(self._actualizar)
         self._actualizar()
         self.pantalla.setFocus()
-
-    def _tecla(self, t: str):
-        s = self.pantalla.text()
-        if t == "⌫":
-            s = s[:-1]
-        elif t == ".":
-            s = s if "." in s else (s or "0") + "."
-        elif len(s) < 7:
-            s += t
-        self.pantalla.setText(s)
 
     def _actualizar(self):
         k = a_decimal(self.pantalla.text())
