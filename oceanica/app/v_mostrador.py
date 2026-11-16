@@ -15,7 +15,9 @@ from PySide6.QtWidgets import (QCompleter, QDateTimeEdit, QGridLayout, QHBoxLayo
 
 from ..servicios import caja, catalogo, clientes, configuracion, ordenes, tickets
 from .botones import COLORES, BotonGrande, KilosDialog, es_categoria_kilo, icono_para, normalizar
+from . import tema
 from .carrito import Carrito
+from .iconos import en_buscador, poner
 from .dialogos import ClienteDialog, CobroDialog, TicketDialog
 from .util import a_decimal, cantidad_txt, chip, crear_tabla, dinero, etiqueta, poblar, seguro, tarjeta
 
@@ -75,9 +77,9 @@ class MostradorView(QWidget):
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
         self.completer.setFilterMode(Qt.MatchContains)
         self.cliente.setCompleter(self.completer)
-        self.b_nuevo_cli = QPushButton("＋ Cliente nuevo")
+        self.b_nuevo_cli = poner(QPushButton("Cliente nuevo"), "user-plus")
         self.b_nuevo_cli.setMinimumHeight(40)
-        self.b_quitar_cli = QPushButton("✕")
+        self.b_quitar_cli = poner(QPushButton(), "x")
         self.b_quitar_cli.setToolTip("Quitar cliente")
         self.b_quitar_cli.setFixedSize(46, 46)
         self.b_quitar_cli.setStyleSheet("padding: 0; min-height: 0;")
@@ -91,7 +93,8 @@ class MostradorView(QWidget):
         fila_busca = QHBoxLayout()
         fila_busca.addWidget(etiqueta("¿Qué trae el cliente?", "subtitulo"), 1)
         self.filtro = QLineEdit()
-        self.filtro.setPlaceholderText("🔍 Buscar (F2)")
+        self.filtro.setPlaceholderText("Buscar (F2)")
+        en_buscador(self.filtro)
         self.filtro.setClearButtonEnabled(True)
         self.filtro.setMaximumWidth(240)
         fila_busca.addWidget(self.filtro)
@@ -103,7 +106,7 @@ class MostradorView(QWidget):
         li = QVBoxLayout(inicio)
         li.setContentsMargins(0, 0, 0, 0)
         li.setSpacing(10)
-        self.b_kilo = BotonGrande("🧺", "Ropa por kilo", DETALLE_KILO, alto=116, destacado=True)
+        self.b_kilo = BotonGrande("wash-machine", "Ropa por kilo", DETALLE_KILO, alto=116, destacado=True)
         self.b_kilo.clicked.connect(self.abrir_kilo)
         li.addWidget(self.b_kilo)
         li.addWidget(etiqueta("Por pieza", "subtitulo"))
@@ -116,7 +119,7 @@ class MostradorView(QWidget):
         lo.setContentsMargins(0, 0, 0, 0)
         lo.setSpacing(10)
         cab = QHBoxLayout()
-        self.b_regresar = QPushButton("←  Regresar")
+        self.b_regresar = poner(QPushButton("Regresar"), "arrow-left")
         self.b_regresar.setMinimumSize(150, 48)
         self.b_regresar.setStyleSheet("font-size: 12pt; font-weight: 600;")
         self.b_regresar.clicked.connect(self.ir_inicio)
@@ -152,9 +155,9 @@ class MostradorView(QWidget):
         self.tabla_carrito.setStyleSheet("font-size: 11.5pt;")
         dl.addWidget(self.tabla_carrito, 1)
         fila_q = QHBoxLayout()
-        self.b_menos = QPushButton("－")
-        self.b_mas = QPushButton("＋")
-        self.b_quitar = QPushButton("🗑  Quitar")
+        self.b_menos = poner(QPushButton(), "minus", tam=28)
+        self.b_mas = poner(QPushButton(), "plus", tam=28)
+        self.b_quitar = poner(QPushButton("Quitar"), "trash", tema.ERROR)
         for b, tip in ((self.b_menos, "Una pieza menos"), (self.b_mas, "Una pieza más")):
             b.setToolTip(tip)
             b.setMinimumSize(64, 48)
@@ -190,7 +193,7 @@ class MostradorView(QWidget):
         fila_b = QHBoxLayout()
         self.b_limpiar = QPushButton("Empezar de nuevo")
         self.b_limpiar.setMinimumHeight(56)
-        self.b_guardar = QPushButton("✔  Guardar y cobrar")
+        self.b_guardar = poner(QPushButton("Guardar y cobrar"), "check", "white", 26)
         self.b_guardar.setProperty("rol", "primario")
         self.b_guardar.setMinimumHeight(56)
         self.b_guardar.setStyleSheet("font-size: 14pt;")
@@ -276,7 +279,7 @@ class MostradorView(QWidget):
             self.abrir_categoria(self.cat_kilo)
 
     def abrir_categoria(self, cat: dict):
-        self._mostrar_opciones(f"{icono_para(cat['nombre'])}  {cat['nombre']}", self._de_categoria(cat["id"]),
+        self._mostrar_opciones(cat["nombre"], self._de_categoria(cat["id"]),
                                "Todavía no hay opciones en esta categoría.\n"
                                "El administrador las agrega en «Servicios y precios».")
 
@@ -304,7 +307,7 @@ class MostradorView(QWidget):
             self.ir_inicio()
             return
         encontrados = [s for s in self.servicios if q in normalizar(s["nombre"])]
-        self._mostrar_opciones(f"🔍  «{self.filtro.text().strip()}»", encontrados, "No se encontró nada con ese nombre.")
+        self._mostrar_opciones(f"Resultados para «{self.filtro.text().strip()}»", encontrados, "No se encontró nada con ese nombre.")
 
     def _elegir_primero(self):
         if self.visibles:
@@ -341,7 +344,7 @@ class MostradorView(QWidget):
         fila = next(i for i, l in enumerate(self.carrito.lineas) if l.servicio_id == servicio["id"])
         self.tabla_carrito.selectRow(fila)
         texto = cantidad_txt(cantidad, servicio["unidad"]).replace("pza", "pieza" if cantidad == 1 else "piezas")
-        self._avisar(f"✔  Se agregó: {servicio['nombre']} ({texto})")
+        self._avisar(f"Se agregó: {servicio['nombre']} ({texto})")
         return True
 
     def _avisar(self, texto: str):
@@ -353,7 +356,7 @@ class MostradorView(QWidget):
         return self.tabla_carrito.currentRow()
 
     def _sumar(self, delta: int):
-        """＋/－ en piezas. En kilos (o con doble clic) abre el teclado para cambiar la cantidad."""
+        """Más/menos en piezas. En kilos (o con doble clic) abre el teclado para cambiar la cantidad."""
         r = self._linea_actual()
         if not 0 <= r < len(self.carrito.lineas):
             return
@@ -416,7 +419,7 @@ class MostradorView(QWidget):
     def _elegir_cliente(self, etiqueta_: str):
         self.cliente_id = self.mapa_clientes.get(etiqueta_)
         if self.cliente_id:
-            self.info_cli.setText("✔ Cliente seleccionado")
+            self.info_cli.setText("Cliente seleccionado")
 
     def _quitar_cliente(self):
         self.cliente.clear()
@@ -435,7 +438,7 @@ class MostradorView(QWidget):
             v = dlg.valores()
             self.cliente.setText(" ".join(filter(None, [v["nombre"].strip(), v["apellidos"].strip()])))
             self.cliente_id = nuevo
-            self.info_cli.setText("✔ Cliente creado y seleccionado")
+            self.info_cli.setText("Cliente creado y seleccionado")
 
     # --------------------------------------------------------------- guardar
     def limpiar(self, preguntar: bool = False):

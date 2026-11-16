@@ -1,12 +1,13 @@
 """Ventana principal: barra superior, navegación y páginas según el modo."""
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QListWidget, QMainWindow, QPushButton, QStackedWidget,
+from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QPushButton, QStackedWidget,
                                QVBoxLayout, QWidget)
 
 from ..servicios import caja, configuracion
+from .iconos import icono
 from .login import LoginView, logo
 from .util import chip, etiqueta, fecha_hora
 from .v_asistencia import AsistenciaView
@@ -26,15 +27,23 @@ INACTIVIDAD_ADMIN_MS = 10 * 60 * 1000  # el administrador se cierra solo tras 10
 
 
 ICONOS_MENU = {
-    "Nueva orden": "📝", "Órdenes": "📋", "Caja": "💰", "Clientes": "👥", "Asistencia": "🕘",
-    "Inventario": "📦", "Reportes": "📊", "Nómina": "💼", "Servicios y precios": "🏷️",
-    "Empleados y usuarios": "👤", "Transferencias": "📱", "Configuración": "⚙️",
+    "Nueva orden": "file-plus", "Órdenes": "clipboard-list", "Caja": "cash-register", "Clientes": "users",
+    "Asistencia": "clock-hour-4", "Inventario": "package", "Reportes": "chart-bar", "Nómina": "wallet",
+    "Servicios y precios": "tag", "Empleados y usuarios": "id-badge-2", "Transferencias": "arrows-exchange",
+    "Configuración": "settings",
 }
 
 
 def texto_menu(titulo: str) -> str:
-    """Ícono + nombre de la sección: se reconoce de un vistazo."""
-    return f"{ICONOS_MENU.get(titulo, '•')}   {titulo}"
+    return f"  {titulo}"
+
+
+def item_menu(titulo: str) -> QListWidgetItem:
+    """Ícono de línea + nombre de la sección: se reconoce de un vistazo."""
+    it = QListWidgetItem(texto_menu(titulo))
+    if titulo in ICONOS_MENU:
+        it.setIcon(icono(ICONOS_MENU[titulo], "white", 24))
+    return it
 
 
 class _Actividad(QObject):
@@ -103,8 +112,10 @@ class Ventana(QMainWindow):
         self.nav.setObjectName("nav")
         self.nav.setFixedWidth(250)
         self.nav.setFocusPolicy(Qt.NoFocus)
+        self.nav.setIconSize(QSize(24, 24))
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         for i, p in enumerate(paginas):
-            self.nav.addItem(texto_menu(p.titulo))
+            self.nav.addItem(item_menu(p.titulo))
             if i < 9:
                 QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self.shell, activated=lambda i=i: self.nav.setCurrentRow(i))
         raiz.addWidget(self.nav)

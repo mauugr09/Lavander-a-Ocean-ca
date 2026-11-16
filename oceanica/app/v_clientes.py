@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
+from .iconos import en_buscador, poner
 from ..servicios import clientes
 from .dialogos import ClienteDialog
 from .util import ESTADOS, crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, poblar, seguro
@@ -19,10 +20,11 @@ class ClientesView(QWidget):
         lay.setContentsMargins(16, 16, 16, 16)
         fila = QHBoxLayout()
         self.buscar = QLineEdit()
-        self.buscar.setPlaceholderText("🔍  Buscar por nombre o teléfono")
-        self.b_nuevo = QPushButton("➕  Nuevo cliente")
+        self.buscar.setPlaceholderText("Buscar por nombre o teléfono")
+        en_buscador(self.buscar)
+        self.b_nuevo = poner(QPushButton("Nuevo cliente"), "user-plus")
         self.b_nuevo.setProperty("rol", "primario")
-        self.b_editar = QPushButton("✏️  Editar datos")
+        self.b_editar = poner(QPushButton("Editar datos"), "pencil")
         fila.addWidget(self.buscar, 1)
         fila.addWidget(self.b_nuevo)
         fila.addWidget(self.b_editar)

@@ -52,7 +52,7 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 - **Nueva orden con botones grandes**: «Ropa por kilo» (playeras, ropa interior, sudaderas, pantalones y sábanas) abre un teclado numérico para los kilos de la báscula. Las demás categorías (Colchas y edredones, Cobijas, Chamarras y abrigos, Cojines, Cortinas, Calzado, Planchado, Estilo tintorería, Otros) muestran sus opciones con precio; cada toque agrega una pieza. En la orden, ＋/－ cambian las piezas (en kilos abren el teclado) y «Quitar» borra la línea. Las opciones y precios se registran en «Servicios y precios».
 - **Cobro por pasos**: «¿Cómo va a pagar?» (todo ahora, anticipo o al recoger) → «¿Con qué paga?» (efectivo o transferencia) → billetes sugeridos y cambio en grande, o confirmación de la captura del comprobante.
 - **Identificación con PIN**: el empleado toca su nombre y escribe su PIN en un teclado grande.
-- Toda la interfaz usa letra grande, botones amplios con íconos y trato de «usted».
+- Toda la interfaz usa letra grande, botones amplios con íconos de línea (Tabler Icons, licencia MIT, en `oceanica/app/recursos/iconos`) y trato de «usted».
 - Atajos: F2 buscar servicio · F3 cliente (en Órdenes: buscar) · F4 cliente nuevo · F5 guardar y cobrar · Esc regresar (en el inicio: empezar de nuevo, con confirmación) · F6 cobrar saldo · F7 entregar · Ctrl+1…9 cambiar de sección.
 - Búsqueda: escribe parte del nombre del servicio y Enter elige el primero. Ignora acentos y mayúsculas.
 - Los tickets se muestran en pantalla; se imprimen en la térmica (Windows + pywin32, nombre en la configuración `impresora_ticket`) o se abren como PDF (carpeta `tickets/`).

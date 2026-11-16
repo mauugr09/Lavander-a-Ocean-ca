@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (QCheckBox, QDialog, QGridLayout, QHBoxLayout, QLi
 
 from ..servicios import caja
 from .botones import COLORES, BotonGrande, Teclado
+from .iconos import poner
 from .tema import OK
 from .util import dinero, etiqueta
 
@@ -45,8 +46,8 @@ def _pagina(titulo: str) -> tuple[QWidget, QVBoxLayout]:
     return w, lay
 
 
-def _boton_accion(texto: str) -> QPushButton:
-    b = QPushButton(texto)
+def _boton_accion(texto: str, ico: str = "check") -> QPushButton:
+    b = poner(QPushButton(texto), ico, "white", 24)
     b.setProperty("rol", "primario")
     b.setMinimumHeight(58)
     b.setStyleSheet("font-size: 15pt;")
@@ -88,7 +89,7 @@ class CobroDialog(QDialog):
         self.msg.setStyleSheet("font-size: 12pt;")
         lay.addWidget(self.msg)
         pie = QHBoxLayout()
-        self.b_atras = QPushButton("←  Atrás")
+        self.b_atras = poner(QPushButton("Atrás"), "arrow-left")
         self.b_atras.setMinimumHeight(48)
         self.b_cancelar = QPushButton("Cancelar")
         self.b_cancelar.setMinimumHeight(48)
@@ -105,10 +106,10 @@ class CobroDialog(QDialog):
     # ---------------------------------------------------------------- páginas
     def _pag_modo(self):
         w, lay = _pagina("¿Cómo va a pagar el cliente?")
-        self.b_todo = BotonGrande("✅", "Paga todo ahora", dinero(self.importe), COLORES[3], alto=96)
-        self.b_parte = BotonGrande("🧾", "Deja un anticipo" if self.permite_cero else "Paga solo una parte",
+        self.b_todo = BotonGrande("circle-check", "Paga todo ahora", dinero(self.importe), COLORES[3], alto=96)
+        self.b_parte = BotonGrande("receipt", "Deja un anticipo" if self.permite_cero else "Paga solo una parte",
                                    "El resto se cobra después", COLORES[0], alto=96)
-        self.b_despues = BotonGrande("🕒", "Paga al recoger", "No se cobra nada ahora", COLORES[4], alto=96)
+        self.b_despues = BotonGrande("clock", "Paga al recoger", "No se cobra nada ahora", COLORES[4], alto=96)
         self.b_despues.setVisible(self.permite_cero)
         for b in (self.b_todo, self.b_parte, self.b_despues):
             lay.addWidget(b)
@@ -126,7 +127,7 @@ class CobroDialog(QDialog):
         self.lb_resto.setStyleSheet("font-size: 13pt;")
         self.lb_resto.setAlignment(Qt.AlignRight)
         lay.addWidget(self.lb_resto)
-        self.b_parte_ok = _boton_accion("Continuar  →")
+        self.b_parte_ok = _boton_accion("Continuar", "arrow-right")
         lay.addWidget(self.b_parte_ok)
         self.teclado_parte.pantalla.textChanged.connect(self._ver_resto)
         self.teclado_parte.pantalla.returnPressed.connect(self.confirmar_parte)
@@ -142,7 +143,7 @@ class CobroDialog(QDialog):
         fila.setSpacing(12)
         self.botones_metodo: dict[int, BotonGrande] = {}
         for i, m in enumerate(self.metodos.values()):
-            icono = "💵" if m["es_efectivo"] else ("📱" if m["requiere_confirmacion"] else "💳")
+            icono = "cash-banknote" if m["es_efectivo"] else ("device-mobile" if m["requiere_confirmacion"] else "credit-card")
             b = BotonGrande(icono, m["nombre"], "", COLORES[(3, 1, 2)[i % 3]], alto=130)
             b.clicked.connect(lambda _=False, mid=m["id"]: self.elegir_metodo(mid))
             self.botones_metodo[m["id"]] = b
@@ -205,11 +206,11 @@ class CobroDialog(QDialog):
         elif pagina == P_EFECTIVO:
             self._armar_billetes()
             self.recibido.clear()
-            self.b_cobrar_ef.setText(f"✔  {'Devolver' if self.reembolso else 'Cobrar'} {dinero(self.monto)}")
+            self.b_cobrar_ef.setText(f"{'Devolver' if self.reembolso else 'Cobrar'} {dinero(self.monto)}")
             self._ver_cambio()
             self.recibido.setFocus()
         elif pagina == P_TRANSFERENCIA:
-            self.b_cobrar_tr.setText(f"✔  Registrar {'devolución' if self.reembolso else 'pago'} de {dinero(self.monto)}")
+            self.b_cobrar_tr.setText(f"Registrar {'devolución' if self.reembolso else 'pago'} de {dinero(self.monto)}")
 
     def atras(self):
         if self.historial:

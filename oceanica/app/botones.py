@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QDialog, QGridLayout, QHBoxLayout, QLabel, QLineE
                                QVBoxLayout, QWidget)
 
 from .tema import PRIMARIO, PRIMARIO_OSCURO, SECUNDARIO, TEXTO, TEXTO_SUAVE
+from .iconos import en_etiqueta, poner
 from .util import a_decimal, dinero, etiqueta
 
 # Colores suaves por categoría (fondo, borde): ayudan a reconocer cada botón de un vistazo.
@@ -25,9 +26,10 @@ COLORES = [
 
 # Ícono según palabras del nombre de la categoría (sin acentos ni mayúsculas).
 _ICONOS = [
-    ("kilo", "🧺"), ("colcha", "🛏️"), ("edredon", "🛏️"), ("cobija", "🧶"), ("chamarra", "🧥"),
-    ("abrigo", "🧥"), ("cojin", "🛋️"), ("cortina", "🏠"), ("calzado", "👟"), ("zapato", "👟"),
-    ("tenis", "👟"), ("plancha", "👔"), ("tintorer", "👗"), ("otro", "➕"),
+    ("kilo", "wash-machine"), ("colcha", "bed"), ("edredon", "bed"), ("cobija", "stack-2"),
+    ("chamarra", "jacket"), ("abrigo", "jacket"), ("cojin", "pillow"), ("cortina", "window"),
+    ("calzado", "shoe"), ("zapato", "shoe"), ("tenis", "shoe"), ("plancha", "ironing-1"),
+    ("tintorer", "hanger"), ("otro", "dots"),
 ]
 
 
@@ -37,7 +39,7 @@ def normalizar(s: str) -> str:
 
 def icono_para(nombre: str) -> str:
     n = normalizar(nombre)
-    return next((ico for clave, ico in _ICONOS if clave in n), "🧺")
+    return next((ico for clave, ico in _ICONOS if clave in n), "wash-machine")
 
 
 def es_categoria_kilo(nombre: str) -> bool:
@@ -73,8 +75,10 @@ class BotonGrande(QPushButton):
         lay = QHBoxLayout(self) if destacado else QVBoxLayout(self)
         lay.setContentsMargins(14, 8, 14, 8)
         lay.setSpacing(4 if not destacado else 16)
-        self.lb_icono = QLabel(icono)
-        self.lb_icono.setStyleSheet(f"font-size: {38 if destacado else 30}pt;")  # la hoja global fija 10.5pt
+        self.lb_icono = QLabel()
+        if icono:
+            en_etiqueta(self.lb_icono, icono, "white" if destacado else PRIMARIO, 52 if destacado else 40, 1.6)
+        self.lb_icono.setVisible(bool(icono))
         self.lb_icono.setAlignment(Qt.AlignCenter)
         textos = QVBoxLayout()
         textos.setSpacing(2)
@@ -132,7 +136,9 @@ class Teclado(QWidget):
         rejilla = QGridLayout()
         rejilla.setSpacing(8)
         for i, t in enumerate(["7", "8", "9", "4", "5", "6", "1", "2", "3", "." if con_punto else "C", "0", "⌫"]):
-            b = QPushButton(t)
+            b = QPushButton("" if t == "⌫" else t)
+            if t == "⌫":
+                poner(b, "backspace", tam=30)
             b.setMinimumSize(80, alto_tecla)
             b.setFocusPolicy(Qt.NoFocus)
             b.setAccessibleName({"⌫": "Borrar", "C": "Borrar todo"}.get(t, t))
@@ -169,7 +175,7 @@ class KilosDialog(QDialog):
         self.setMinimumWidth(380)
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
-        lay.addWidget(etiqueta(f"🧺  {servicio['nombre']}", "subtitulo"))
+        lay.addWidget(etiqueta(servicio["nombre"], "subtitulo"))
         lay.addWidget(etiqueta(f"{dinero(self.precio)} por kilo · Pese la ropa y escriba los kilos", "suave", True))
 
         self.teclado = Teclado("" if actual is None else format(actual.normalize(), "f"), sufijo="kg")
@@ -185,7 +191,7 @@ class KilosDialog(QDialog):
         botones = QHBoxLayout()
         cancelar = QPushButton("Cancelar")
         cancelar.setMinimumHeight(52)
-        self.b_ok = QPushButton("✔  Agregar" if actual is None else "✔  Cambiar")
+        self.b_ok = poner(QPushButton("Agregar" if actual is None else "Cambiar"), "check", "white")
         self.b_ok.setProperty("rol", "primario")
         self.b_ok.setMinimumHeight(52)
         self.b_ok.setStyleSheet("font-size: 14pt;")

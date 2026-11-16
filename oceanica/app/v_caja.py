@@ -6,6 +6,7 @@ from decimal import Decimal
 from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton,
                                QVBoxLayout, QWidget)
 
+from .iconos import poner
 from ..servicios import caja, tickets
 from .dialogos import TicketDialog
 from .util import a_decimal, crear_tabla, dinero, etiqueta, fecha_hora, poblar, seguro, tarjeta
@@ -34,7 +35,7 @@ class CajaView(QWidget):
         fila = QHBoxLayout()
         self.fondo = QLineEdit("0.00")
         self.fondo.setMaximumWidth(200)
-        self.b_abrir = QPushButton("🔓  Abrir caja")
+        self.b_abrir = poner(QPushButton("Abrir caja"), "lock-open", "white")
         self.b_abrir.setProperty("rol", "primario")
         self.b_abrir.setMinimumHeight(52)
         self.fondo.setMinimumHeight(44)
@@ -57,8 +58,8 @@ class CajaView(QWidget):
         self.tabla_mov = crear_tabla(["Hora", "Tipo", "Concepto", "Monto", "Quién"], derecha=(3,), estirar=2)
         pa.addWidget(self.tabla_mov, 1)
         fb = QHBoxLayout()
-        self.b_mov = QPushButton("➕  Registrar gasto, ingreso o retiro")
-        self.b_cerrar = QPushButton("🔒  Cerrar caja (corte del día)")
+        self.b_mov = poner(QPushButton("Registrar gasto, ingreso o retiro"), "plus")
+        self.b_cerrar = poner(QPushButton("Cerrar caja (corte del día)"), "lock", "white")
         self.b_cerrar.setProperty("rol", "primario")
         for b in (self.b_mov, self.b_cerrar):
             b.setMinimumHeight(52)

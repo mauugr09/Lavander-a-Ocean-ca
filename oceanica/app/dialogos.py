@@ -10,6 +10,7 @@ from ..config import RAIZ
 from ..seguridad import ErrorAcceso, autenticar_pin
 from ..servicios import tickets, usuarios
 from .botones import Teclado
+from .iconos import poner
 from .cobro import CobroDialog  # noqa: F401  (se usa desde las pantallas como dialogos.CobroDialog)
 from .tema import PRIMARIO
 from .util import etiqueta, seguro
@@ -59,7 +60,7 @@ class PinDialog(QDialog):
             izq.addWidget(etiqueta("1. Toque su nombre", "subtitulo"))
             for i, f in enumerate(filas):
                 self.combo.addItem(f["nombre"], f["usuario_id"])
-                b = QPushButton(f["nombre"] + ("\n✔ Ya registró su llegada" if f["presente"] else ""))
+                b = QPushButton(f["nombre"] + ("\n(ya registró su llegada)" if f["presente"] else ""))
                 b.setCheckable(True)
                 b.setMinimumHeight(64)
                 b.setStyleSheet(f"QPushButton {{ font-size: 13pt; font-weight: 600; text-align: left; padding: 8px 16px; }}"
@@ -86,7 +87,7 @@ class PinDialog(QDialog):
         pie = QHBoxLayout()
         cancelar = QPushButton("Cancelar")
         cancelar.setMinimumHeight(52)
-        self.b_ok = QPushButton("✔  Continuar")
+        self.b_ok = poner(QPushButton("Continuar"), "check", "white")
         self.b_ok.setProperty("rol", "primario")
         self.b_ok.setMinimumHeight(52)
         self.b_ok.setStyleSheet("font-size: 14pt;")

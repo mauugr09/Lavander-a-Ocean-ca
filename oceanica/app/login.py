@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
+from .iconos import poner
 from ..seguridad import ErrorAcceso, iniciar_sesion
 from ..servicios import usuarios
 from ..servicios.comunes import ErrorNegocio
@@ -48,7 +49,7 @@ class LoginView(QWidget):
         cl = QVBoxLayout(card)
         cl.setContentsMargins(22, 22, 22, 22)
         cl.setSpacing(10)
-        self.b_mostrador = QPushButton("🧺  Entrar al mostrador")
+        self.b_mostrador = poner(QPushButton("Entrar al mostrador"), "cash-register", "white", 26)
         self.b_mostrador.setProperty("rol", "primario")
         self.b_mostrador.setMinimumHeight(64)
         self.b_mostrador.setStyleSheet("font-size: 15pt;")

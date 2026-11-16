@@ -7,6 +7,7 @@ from PySide6.QtCore import QDate, QTime
 from PySide6.QtWidgets import (QComboBox, QDateEdit, QDialog, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox,
                                QPushButton, QTimeEdit, QVBoxLayout, QWidget)
 
+from .iconos import poner
 from ..servicios import empleados
 from .dialogos import _botones
 from .util import a_decimal, crear_tabla, etiqueta, hora, id_seleccionado, poblar, seguro
@@ -90,9 +91,9 @@ class AsistenciaView(QWidget):
         self.tabla = crear_tabla(["Empleado", "Estado", "Entrada", "Salida", "Retardo (min)"], derecha=(4,))
         lay.addWidget(self.tabla, 1)
         fila = QHBoxLayout()
-        self.b_llegada = QPushButton("🟢  Registrar mi llegada")
+        self.b_llegada = poner(QPushButton("Registrar mi llegada"), "login-2", "white", 26)
         self.b_llegada.setProperty("rol", "primario")
-        self.b_salida = QPushButton("🔴  Registrar mi salida")
+        self.b_salida = poner(QPushButton("Registrar mi salida"), "logout-2", tam=26)
         for b in (self.b_llegada, self.b_salida):
             b.setMinimumSize(260, 64)
             b.setStyleSheet("font-size: 14pt; font-weight: 600;")

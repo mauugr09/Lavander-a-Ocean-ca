@@ -13,10 +13,12 @@ from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QInputDialog, QLineEdit, 
 from ..servicios import caja, configuracion, ordenes, tickets
 from . import tema
 from .dialogos import CobroDialog, TicketDialog
+from .iconos import en_buscador, poner
 from .util import (ESTADOS, cantidad_txt, crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, poblar, seguro,
                    tarjeta)
 
-SIGUIENTE = {"recibida": ("en_proceso", "▶  Pasar a «En proceso»"), "en_proceso": ("lista", "✔  Marcar como «Lista»")}
+SIGUIENTE = {"recibida": ("en_proceso", "Pasar a «En proceso»", "player-play"),
+             "en_proceso": ("lista", "Marcar como «Lista»", "check")}
 FILTROS = [("Pendientes de entregar", None), ("Todas", "todas"), ("Recibidas", "recibida"), ("En proceso", "en_proceso"),
            ("Listas", "lista"), ("Entregadas", "entregada"), ("Canceladas", "cancelada")]
 
@@ -36,7 +38,8 @@ class OrdenesView(QWidget):
         izq = QVBoxLayout()
         fila = QHBoxLayout()
         self.buscar = QLineEdit()
-        self.buscar.setPlaceholderText("🔍  Buscar por folio, nombre o teléfono")
+        self.buscar.setPlaceholderText("Buscar por folio, nombre o teléfono")
+        en_buscador(self.buscar)
         self.filtro = QComboBox()
         for texto, valor in FILTROS:
             self.filtro.addItem(texto, valor)
@@ -56,15 +59,15 @@ class OrdenesView(QWidget):
         self.detalle.setFrameShape(QTextBrowser.NoFrame)
         dl.addWidget(self.detalle, 1)
         f1 = QHBoxLayout()
-        self.b_avanzar = QPushButton("▶  Pasar a «En proceso»")
-        self.b_cobrar = QPushButton("💲  Cobrar lo pendiente")
+        self.b_avanzar = poner(QPushButton("Pasar a «En proceso»"), "player-play")
+        self.b_cobrar = poner(QPushButton("Cobrar lo pendiente"), "cash-banknote")
         f1.addWidget(self.b_avanzar)
         f1.addWidget(self.b_cobrar)
         dl.addLayout(f1)
         f2 = QHBoxLayout()
-        self.b_entregar = QPushButton("📦  Entregar al cliente")
+        self.b_entregar = poner(QPushButton("Entregar al cliente"), "package-export", "white", 24)
         self.b_entregar.setProperty("rol", "primario")
-        self.b_ticket = QPushButton("🖨  Ticket")
+        self.b_ticket = poner(QPushButton("Ticket"), "printer")
         self.b_cancelar = QPushButton("Cancelar orden")
         self.b_cancelar.setProperty("rol", "peligro")
         f2.addWidget(self.b_entregar, 1)
@@ -157,9 +160,9 @@ class OrdenesView(QWidget):
             h.append(f"<p>Descuento: -{dinero(o['descuento'])}</p>")
         h.append(f"<p style='font-size:13pt'><b>Total {dinero(o['total'])}</b> · Pagado {dinero(o['pagado'])}</p>")
         h.append(f"<p style='font-size:15pt; color:{tema.ALERTA}'><b>Por pagar: {dinero(o['saldo'])}</b></p>" if o["saldo"] > 0
-                 else f"<p style='font-size:15pt; color:{tema.OK}'><b>✔ Pagado completo</b></p>")
+                 else f"<p style='font-size:15pt; color:{tema.OK}'><b>Pagado completo</b></p>")
         if o["por_confirmar"] > 0:
-            h.append(f"<p style='color:{tema.ALERTA}'>⚠ {dinero(o['por_confirmar'])} en transferencia por confirmar</p>")
+            h.append(f"<p style='color:{tema.ALERTA}'><b>Atención:</b> {dinero(o['por_confirmar'])} en transferencia por confirmar</p>")
         for p in o["pagos"]:
             marca = {"pendiente": " (por confirmar)", "rechazado": " (rechazado)"}.get(p["estado_confirmacion"], "")
             h.append(f"<small>{fecha_hora(p['pagado_en'])} · {p['tipo']} {dinero(p['monto'])} · "
@@ -176,6 +179,7 @@ class OrdenesView(QWidget):
         self.b_avanzar.setVisible(sig is not None)
         if sig:
             self.b_avanzar.setText(sig[1])
+            poner(self.b_avanzar, sig[2])
         self.b_cobrar.setEnabled(bool(o) and o["estado"] != "cancelada" and o["saldo"] > 0)
         self.b_entregar.setEnabled(abierta)
         self.b_cancelar.setEnabled(abierta)
