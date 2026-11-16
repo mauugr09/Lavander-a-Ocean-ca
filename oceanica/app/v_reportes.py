@@ -14,6 +14,8 @@ from .util import crear_tabla, dinero, etiqueta, seguro, tarjeta
 # (título, función, ¿usa rango de fechas?)
 REPORTES = [
     ("Ventas por día", reportes.ventas_por_dia, True),
+    ("Ventas por semana", reportes.ventas_por_semana, True),
+    ("Ventas por mes", reportes.ventas_por_mes, True),
     ("Cobros por método de pago", reportes.cobros_por_metodo, True),
     ("Ventas por servicio", reportes.ventas_por_servicio, True),
     ("Órdenes pendientes", reportes.ordenes_pendientes, False),
@@ -22,7 +24,7 @@ REPORTES = [
     ("Asistencia", reportes.asistencia, True),
     ("Cortes de caja", reportes.cortes_de_caja, True),
 ]
-PERIODOS = ["Hoy", "Ayer", "Esta semana", "Este mes", "Mes pasado", "Personalizado"]
+PERIODOS = ["Hoy", "Ayer", "Esta semana", "Este mes", "Mes pasado", "Este año", "Últimos 12 meses", "Personalizado"]
 NUMERICOS = {"dinero", "numero"}
 
 
@@ -37,7 +39,17 @@ def rango_periodo(nombre: str, hoy: date | None = None) -> tuple[date, date]:
     if nombre == "Mes pasado":
         fin = hoy.replace(day=1) - timedelta(days=1)
         return fin.replace(day=1), fin
+    if nombre == "Este año":
+        return hoy.replace(month=1, day=1), hoy
+    if nombre == "Últimos 12 meses":
+        inicio = hoy.replace(day=1)
+        for _ in range(11):
+            inicio = (inicio - timedelta(days=1)).replace(day=1)
+        return inicio, hoy
     return hoy, hoy
+
+
+SUGERIDO = {"Ventas por semana": ("Hoy", "Ayer", "Esta semana"), "Ventas por mes": ("Hoy", "Ayer", "Esta semana", "Este mes", "Mes pasado")}
 
 
 class ReportesView(QWidget):
@@ -116,6 +128,7 @@ class ReportesView(QWidget):
         self.periodo.currentTextChanged.connect(self._cambio_periodo)
         self.desde.dateChanged.connect(self.recargar)
         self.hasta.dateChanged.connect(self.recargar)
+        self.selector.currentIndexChanged.connect(self._periodo_sugerido)
         self.selector.currentIndexChanged.connect(self.recargar)
         self.b_exportar.clicked.connect(self.exportar)
         self._cambio_periodo(self.periodo.currentText(), recargar=False)
@@ -185,6 +198,12 @@ class ReportesView(QWidget):
         h = self.tabla.horizontalHeader()
         for i in range(len(cols)):
             h.setSectionResizeMode(i, QHeaderView.Stretch if i == 0 else QHeaderView.ResizeToContents)
+
+    def _periodo_sugerido(self):
+        """Por semana se ve mejor el mes; por mes, el último año."""
+        titulo = REPORTES[self.selector.currentIndex()][0]
+        if self.periodo.currentText() in SUGERIDO.get(titulo, ()):
+            self.periodo.setCurrentText("Este mes" if titulo == "Ventas por semana" else "Últimos 12 meses")
 
     def exportar(self):
         if not self.reporte:

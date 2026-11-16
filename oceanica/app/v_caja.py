@@ -152,7 +152,7 @@ class CajaView(QWidget):
             if ok or r != "diferencia":
                 break
             obs, ok2 = QInputDialog.getText(self, "Hay diferencia", "El efectivo no coincide con lo esperado.\n"
-                                            "Explica la diferencia para poder cerrar:")
+                                            "Explique la diferencia para poder cerrar:")
             if not ok2 or not obs.strip():
                 return
         if ok and isinstance(r, dict):

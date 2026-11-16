@@ -88,3 +88,29 @@ def test_cifras_del_panel_empiezan_ocultas(conn, admin):
     assert all(not i.oculto for i in p.indicadores)
     p.al_mostrar()                                       # al volver a entrar, se ocultan otra vez
     assert all(i.oculto for i in p.indicadores)
+
+
+def test_reportes_de_ventas_por_semana_y_por_mes(conn, admin, empleado, tmp_path):
+    from oceanica.servicios import exportacion, reportes
+    kilo = catalogo.crear_servicio(conn, admin, catalogo.listar_categorias(conn)[0]["id"], "Lavado", "kilo", "30")
+    ef = next(m for m in caja.listar_metodos(conn) if m["es_efectivo"])["id"]
+    caja.abrir_corte(conn, admin, 0)
+    for cuando, kg in [(datetime(2026, 10, 30, 10), 10), (datetime(2026, 11, 2, 10), 5), (datetime(2026, 11, 3, 10), 5),
+                       (datetime(2026, 11, 12, 10), 4)]:
+        oid = _orden(conn, empleado, kilo, kg, cuando)
+        caja.registrar_pago(conn, admin, oid, ef, kg * 30)
+        cur = conn.cursor()
+        cur.execute("UPDATE pagos SET pagado_en = %s WHERE orden_id = %s", (cuando, oid))
+        conn.commit()
+    sem = reportes.ventas_por_semana(conn, "2026-10-26", "2026-11-16")
+    assert [f["semana"] for f in sem["filas"]] == ["Del 26 de octubre al 1 de noviembre 2026",
+                                                   "Del 2 al 8 de noviembre 2026", "Del 9 al 15 de noviembre 2026"]
+    assert [(f["ordenes"], f["vendido"], f["promedio"]) for f in sem["filas"]] == [
+        (1, D("300"), D("300")), (2, D("300"), D("150")), (1, D("120"), D("120"))]
+    assert sem["totales"]["vendido"] == D("720") and sem["totales"]["cobrado"] == D("720")
+    mes = reportes.ventas_por_mes(conn, "2026-01-01", "2026-11-16")
+    assert [(f["mes"], f["ordenes"], f["vendido"]) for f in mes["filas"]] == [("Octubre 2026", 1, D("300")),
+                                                                            ("Noviembre 2026", 3, D("420"))]
+    pdf = exportacion.exportar(mes, tmp_path / "mes.pdf", "Oceánica")
+    assert pdf.read_bytes().startswith(b"%PDF")
+    assert exportacion.periodo_legible(mes["subtitulo"]) == "Del 1 de enero al 16 de noviembre de 2026"

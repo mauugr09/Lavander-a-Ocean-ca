@@ -112,7 +112,7 @@ def test_exportar_excel_con_totales(conn, negocio, tmp_path):
     assert any(t.startswith("Cómo leer este reporte") for t in textos)
     enc = next(i for i, f in enumerate(filas) if f[0] == "Servicio")       # tabla con encabezados
     assert filas[-1][0] == "TOTAL" and filas[-1][4] == pytest.approx(354.0)
-    assert hoja.tables and len(hoja._charts) == 1                          # tabla de Excel con filtros y gráfica
+    assert hoja.tables and not hoja._charts                                # tabla con filtros y sin gráficas
     assert enc < len(filas) - 1
 
 

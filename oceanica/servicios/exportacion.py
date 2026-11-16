@@ -1,8 +1,8 @@
 """Exportación de reportes a Excel (.xlsx) y PDF, con el diseño de la lavandería.
 
 Cada archivo lleva: logo y nombre del negocio, título y periodo en palabras («Del 1 al 16 de noviembre
-de 2026»), recuadros con lo más importante (totales, promedio y el mejor día o elemento), una gráfica
-cuando el reporte tiene montos, una nota que explica las columnas y la tabla completa con su total.
+de 2026»), recuadros con lo más importante (totales, promedio y el mejor día o elemento)
+y una nota que explica las columnas, más la tabla completa con su total. Sin gráficas: solo la información.
 """
 from __future__ import annotations
 
@@ -12,15 +12,13 @@ from decimal import Decimal
 from pathlib import Path
 
 import xlsxwriter
-from reportlab.graphics.charts.barcharts import HorizontalBarChart, VerticalBarChart
-from reportlab.graphics.shapes import Drawing, String
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import LETTER, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas as rl_canvas
-from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from ..config import CARPETA_PROGRAMA
 from .comunes import ErrorNegocio
@@ -35,6 +33,10 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto
 NOTAS = {
     "Ventas por día": "«Vendido» es el total de las órdenes recibidas ese día. «Cobrado» es el dinero que entró ese "
                       "día, aunque sea de órdenes de días anteriores; por eso pueden no coincidir.",
+    "Ventas por semana": "Cada renglón es una semana de lunes a domingo. «Vendido» suma las órdenes recibidas en "
+                         "esa semana; «Cobrado», el dinero que entró. «Promedio por orden» es lo que deja cada orden.",
+    "Ventas por mes": "Cada renglón es un mes. «Vendido» suma las órdenes recibidas en el mes; «Cobrado», el dinero "
+                      "que entró. Sirve para comparar qué mes vende más.",
     "Cobros por método de pago": "Dinero que entró en el periodo, separado por forma de pago. Los reembolsos se restan.",
     "Ventas por servicio": "Cuánto se vendió de cada servicio en las órdenes recibidas del periodo (sin canceladas).",
     "Órdenes pendientes": "Órdenes que aún no se entregan. «Días de retraso» cuenta desde la fecha prometida al cliente.",
@@ -97,8 +99,8 @@ def _nota(reporte: dict) -> str:
     return next((n for t, n in NOTAS.items() if reporte["titulo"].startswith(t)), "")
 
 
-def _columna_grafica(reporte: dict) -> tuple[str, str, str, str] | None:
-    """(clave_etiqueta, tipo_etiqueta, clave_valor, encabezado_valor) si conviene graficar el reporte."""
+def _columna_principal(reporte: dict) -> tuple[str, str, str, str] | None:
+    """(clave_etiqueta, tipo_etiqueta, clave_valor, encabezado_valor): la columna principal para el resumen."""
     cols = reporte["columnas"]
     if not cols or cols[0][2] not in ("fecha", "texto") or not (2 <= len(reporte["filas"]) <= 62):
         return None
@@ -113,7 +115,7 @@ def destacados(reporte: dict) -> list[tuple[str, str]]:
     """Hasta 4 recuadros de resumen: totales, promedio diario y el mejor día o elemento."""
     cols = {c[0]: c for c in reporte["columnas"]}
     tiles = [(cols[k][1], formatear(v, cols[k][2])) for k, v in reporte["totales"].items() if k in cols]
-    g = _columna_grafica(reporte)
+    g = _columna_principal(reporte)
     filas = reporte["filas"]
     if g and filas:
         clave_et, tipo_et, clave_val, enc_val = g
@@ -129,7 +131,8 @@ def destacados(reporte: dict) -> list[tuple[str, str]]:
                 tiles.append((f"Mejor día: {formatear(mejor[clave_et], 'fecha')}", formatear(mejor[clave_val], tipo_val)))
             else:
                 nombre = str(mejor[clave_et])
-                tiles.append((f"El más alto: {nombre if len(nombre) <= 28 else nombre[:27] + '…'}",
+                prefijo = {"mes": "Mejor mes", "semana": "Mejor semana"}.get(clave_et, "El más alto")
+                tiles.append((f"{prefijo}: {nombre if len(nombre) <= 34 else nombre[:33] + '…'}",
                               formatear(mejor[clave_val], tipo_val)))
     if not tiles:
         tiles.append(("Renglones", f"{len(filas):,}"))
@@ -215,69 +218,6 @@ def _tiles_pdf(reporte, ancho, E):
     return t
 
 
-def _formato_eje(v: float) -> str:
-    return f"${v / 1000:,.0f} mil" if v >= 10000 else f"${v:,.0f}"
-
-
-def _grafica_pdf(reporte, ancho) -> Drawing | None:
-    g = _columna_grafica(reporte)
-    if not g:
-        return None
-    clave_et, tipo_et, clave_val, enc_val = g
-    filas = reporte["filas"]
-    if tipo_et == "texto":
-        filas = sorted(filas, key=lambda f: _float(f.get(clave_val)), reverse=True)[:10][::-1]
-    valores = [_float(f.get(clave_val)) for f in filas]
-    if not any(valores):
-        return None
-    es_dinero = next(c[2] for c in reporte["columnas"] if c[0] == clave_val) == "dinero"
-    fmt = _formato_eje if es_dinero else (lambda v: f"{v:,.0f}")
-    if tipo_et == "fecha":
-        alto = 6.5 * cm
-        d = Drawing(ancho, alto)
-        ch = VerticalBarChart()
-        ch.x, ch.y, ch.width, ch.height = 1.6 * cm, 1.0 * cm, ancho - 1.8 * cm, alto - 1.6 * cm
-        paso = 1 if len(filas) <= 16 else 2 if len(filas) <= 32 else 4
-        ch.categoryAxis.categoryNames = [f[clave_et].strftime("%d/%m") if i % paso == 0 else ""
-                                         for i, f in enumerate(filas)]
-        ch.categoryAxis.labels.fontSize = 7
-        ch.categoryAxis.labels.angle = 0 if len(filas) <= 16 else 45
-        ch.categoryAxis.labels.boxAnchor = "n" if len(filas) <= 16 else "ne"
-    else:
-        alto = max(4 * cm, len(filas) * 0.62 * cm + 1.8 * cm)
-        d = Drawing(ancho, alto)
-        ch = HorizontalBarChart()
-        ch.x, ch.y, ch.width, ch.height = 5.2 * cm, 0.8 * cm, ancho - 6.6 * cm, alto - 1.7 * cm
-        ch.categoryAxis.categoryNames = [str(f[clave_et])[:30] for f in filas]
-        ch.categoryAxis.labels.fontSize = 8
-        ch.categoryAxis.labels.boxAnchor = "e"
-        ch.barLabelFormat = (lambda v: f"${v:,.0f}") if es_dinero else (lambda v: f"{v:,.0f}")
-        ch.barLabels.fontSize = 7.5
-        ch.barLabels.fontName = "Helvetica"
-        ch.barLabels.boxAnchor = "w"
-        ch.barLabels.dx = 3
-    ch.data = [valores]
-    ch.valueAxis.valueMin = 0
-    ch.valueAxis.labels.fontSize = 7
-    ch.valueAxis.labels.fontName = ch.categoryAxis.labels.fontName = "Helvetica"
-    ch.valueAxis.labels.fillColor = ch.categoryAxis.labels.fillColor = colors.HexColor(SUAVE)
-    ch.valueAxis.labelTextFormat = fmt
-    ch.valueAxis.strokeColor = colors.HexColor(BORDE)
-    ch.valueAxis.gridStrokeColor = colors.HexColor("#E3ECF4")
-    ch.valueAxis.visibleGrid = True
-    ch.categoryAxis.strokeColor = colors.HexColor(BORDE)
-    ch.bars.strokeColor = None
-    ch.bars[0].fillColor = colors.HexColor(AZUL if tipo_et == "fecha" else CIAN)
-    mejor = valores.index(max(valores))
-    ch.bars[(0, mejor)].fillColor = colors.HexColor(VERDE)
-    ch.barSpacing = 1
-    d.add(ch)
-    d.add(String(0, alto - 0.35 * cm, f"{enc_val} ({'por día' if tipo_et == 'fecha' else 'los 10 más altos'}). "
-                                      "En verde, el más alto.", fontName="Helvetica", fontSize=8,
-                 fillColor=colors.HexColor(SUAVE)))
-    return d
-
-
 def _tabla_pdf(reporte, ancho, E):
     cols = reporte["columnas"]
     pesos = [3.0 if c[2] == "texto" else 2.0 if c[2] == "fechahora" else 1.6 for c in cols]
@@ -336,9 +276,6 @@ def exportar_pdf(reporte: dict, ruta, negocio: str = "") -> Path:
     nota = _nota(reporte)
     if nota:
         elementos += [Paragraph(f"<b>Cómo leer este reporte:</b> {nota}", E["nota"]), Spacer(1, 0.3 * cm)]
-    grafica = _grafica_pdf(reporte, ancho)
-    if grafica is not None:
-        elementos += [KeepTogether([Paragraph("Gráfica", E["seccion"]), grafica]), Spacer(1, 0.3 * cm)]
     if reporte["filas"]:
         elementos += [Paragraph(f"Detalle ({len(reporte['filas']):,} renglones)", E["seccion"]),
                       _tabla_pdf(reporte, ancho, E)]
@@ -442,35 +379,8 @@ def exportar_xlsx(reporte: dict, ruta, negocio: str = "") -> Path:
         largo = max([len(enc)] + [len(formatear(r.get(clave), tipo)) for r in reporte["filas"][:500]])
         ws.set_column(j, j, min(max(largo + 3, 12), 45))
 
-    # gráfica a la derecha de la tabla
-    g = _columna_grafica(reporte)
-    if g:
-        clave_et, tipo_et, clave_val, enc_val = g
-        j_et = next(i for i, c in enumerate(cols) if c[0] == clave_et)
-        j_val = next(i for i, c in enumerate(cols) if c[0] == clave_val)
-        hoja = ws.get_name()
-        graf = wb.add_chart({"type": "column" if tipo_et == "fecha" else "bar"})
-        graf.add_series({"name": enc_val,
-                         "categories": [hoja, primera + 1, j_et, ultima, j_et],
-                         "values": [hoja, primera + 1, j_val, ultima, j_val],
-                         "fill": {"color": AZUL if tipo_et == "fecha" else CIAN}, "gap": 60})
-        graf.set_title({"name": f"{enc_val} {'por día' if tipo_et == 'fecha' else 'por elemento'}",
-                        "name_font": {"size": 12, "color": AZUL, "bold": True}})
-        graf.set_legend({"none": True})
-        graf.set_y_axis({"num_format": "$#,##0" if cols[j_val][2] == "dinero" else "#,##0",
-                         "major_gridlines": {"visible": True, "line": {"color": "#E3ECF4"}}})
-        if tipo_et == "fecha":
-            graf.set_x_axis({"date_axis": True, "num_format": "dd/mm", "major_unit": 1 if len(reporte["filas"]) <= 16 else 2,
-                             "major_unit_type": "days", "num_font": {"rotation": -45 if len(reporte["filas"]) > 16 else 0}})
-        if tipo_et == "texto":
-            graf.set_y_axis({"reverse": True})
-            graf.set_x_axis({"num_format": "$#,##0" if cols[j_val][2] == "dinero" else "#,##0"})
-        graf.set_chartarea({"border": {"color": BORDE}})
-        graf.set_size({"width": 620, "height": 340 if tipo_et == "fecha" else max(300, 26 * len(reporte["filas"]))})
-        ws.insert_chart(primera, n + 1, graf, {"x_offset": 10, "y_offset": 0})
-
     # impresión
-    if n > 5 or g:
+    if n > 5:
         ws.set_landscape()
     ws.set_paper(1)
     ws.fit_to_pages(1, 0)
