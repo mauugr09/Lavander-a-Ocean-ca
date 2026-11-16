@@ -1,37 +1,46 @@
-"""Nueva orden: captura rápida por teclado."""
+"""Nueva orden: botones grandes por categoría (pensado para pantalla táctil y para quien no usa mucho la computadora).
+
+Flujo: «Ropa por kilo» abre un teclado para los kilos; las demás categorías muestran sus opciones con precio
+y cada toque agrega una pieza. La búsqueda por teclado (F2) sigue disponible para quien la prefiera.
+"""
 from __future__ import annotations
 
-import unicodedata
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from PySide6.QtCore import QEvent, QStringListModel, Qt
+from PySide6.QtCore import QStringListModel, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QCompleter, QDateTimeEdit, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCompleter, QDateTimeEdit, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                               QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from ..servicios import caja, catalogo, clientes, configuracion, ordenes, tickets
+from .botones import COLORES, BotonGrande, KilosDialog, es_categoria_kilo, icono_para, normalizar
 from .carrito import Carrito
 from .dialogos import ClienteDialog, CobroDialog, TicketDialog
-from .util import a_decimal, cantidad_txt, crear_tabla, dinero, etiqueta, poblar, seguro, tarjeta, UNIDADES
+from .util import a_decimal, cantidad_txt, chip, crear_tabla, dinero, etiqueta, poblar, seguro, tarjeta
+
+DETALLE_KILO = "Playeras, ropa interior, sudaderas, pantalones y sábanas"
+COLUMNAS = 3
 
 
-def _norm(s: str) -> str:
-    return unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+def _rejilla_con_scroll() -> tuple[QScrollArea, QGridLayout]:
+    area = QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QScrollArea.NoFrame)
+    area.setStyleSheet("QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }")
+    cont = QWidget()
+    rej = QGridLayout(cont)
+    rej.setContentsMargins(0, 0, 4, 0)
+    rej.setSpacing(12)
+    area.setWidget(cont)
+    return area, rej
 
 
-class _Filtro(QLineEdit):
-    """Campo de búsqueda: la flecha abajo pasa a la lista."""
-
-    def __init__(self, *a, destino=None):
-        super().__init__(*a)
-        self.destino = destino
-
-    def keyPressEvent(self, e):
-        if e.key() == Qt.Key_Down and self.destino is not None:
-            self.destino.setFocus()
-            return
-        super().keyPressEvent(e)
+def _vaciar(rej: QGridLayout) -> None:
+    while rej.count():
+        w = rej.takeAt(0).widget()
+        if w is not None:
+            w.deleteLater()
 
 
 class MostradorView(QWidget):
@@ -42,8 +51,10 @@ class MostradorView(QWidget):
         self.setObjectName("pagina")
         self.ctx, self.ir_a_orden = ctx, ir_a_orden
         self.carrito = Carrito()
+        self.categorias: list[dict] = []
         self.servicios: list[dict] = []
-        self.visibles: list[dict] = []
+        self.visibles: list[dict] = []          # opciones que se ven ahora (categoría abierta o búsqueda)
+        self.cat_kilo: dict | None = None
         self.cliente_id: int | None = None
         self.mapa_clientes: dict[str, int] = {}
 
@@ -51,22 +62,24 @@ class MostradorView(QWidget):
         raiz.setContentsMargins(16, 16, 16, 16)
         raiz.setSpacing(14)
 
-        # ---- izquierda: cliente y servicios
+        # ---- izquierda: cliente y botones de servicios
         izq = QVBoxLayout()
         izq.setSpacing(8)
-        izq.addWidget(etiqueta("Cliente  (F3)", "subtitulo"))
+        izq.addWidget(etiqueta("Cliente", "subtitulo"))
         fila_cli = QHBoxLayout()
         self.cliente = QLineEdit()
-        self.cliente.setPlaceholderText("Nombre o teléfono — déjalo vacío para venta de mostrador")
+        self.cliente.setPlaceholderText("Nombre o teléfono — déjalo vacío si no se registra")
+        self.cliente.setMinimumHeight(40)
         self.modelo_cli = QStringListModel()
         self.completer = QCompleter(self.modelo_cli, self)
         self.completer.setCaseSensitivity(Qt.CaseInsensitive)
         self.completer.setFilterMode(Qt.MatchContains)
         self.cliente.setCompleter(self.completer)
-        self.b_nuevo_cli = QPushButton("Nuevo (F4)")
+        self.b_nuevo_cli = QPushButton("＋ Cliente nuevo")
+        self.b_nuevo_cli.setMinimumHeight(40)
         self.b_quitar_cli = QPushButton("✕")
         self.b_quitar_cli.setToolTip("Quitar cliente")
-        self.b_quitar_cli.setFixedWidth(40)
+        self.b_quitar_cli.setFixedSize(40, 40)
         fila_cli.addWidget(self.cliente, 1)
         fila_cli.addWidget(self.b_nuevo_cli)
         fila_cli.addWidget(self.b_quitar_cli)
@@ -74,39 +87,83 @@ class MostradorView(QWidget):
         self.info_cli = etiqueta("", "suave")
         izq.addWidget(self.info_cli)
 
-        izq.addSpacing(6)
-        izq.addWidget(etiqueta("Servicio  (F2)", "subtitulo"))
-        self.tabla_serv = crear_tabla(["Servicio", "Unidad", "Precio"], derecha=(2,))
-        self.filtro = _Filtro(destino=self.tabla_serv)
-        self.filtro.setPlaceholderText("Escribe para buscar…  ↓ para elegir de la lista · Enter para dar la cantidad")
-        izq.addWidget(self.filtro)
-        izq.addWidget(self.tabla_serv, 1)
-        fila_cant = QHBoxLayout()
-        self.lb_cant = QLabel("Cantidad")
-        self.cantidad = QLineEdit()
-        self.cantidad.setPlaceholderText("0")
-        self.cantidad.setMaximumWidth(120)
-        self.lb_unidad = etiqueta("", "suave")
-        self.b_agregar = QPushButton("Agregar (Enter)")
-        fila_cant.addWidget(self.lb_cant)
-        fila_cant.addWidget(self.cantidad)
-        fila_cant.addWidget(self.lb_unidad)
-        fila_cant.addStretch(1)
-        fila_cant.addWidget(self.b_agregar)
-        izq.addLayout(fila_cant)
-        raiz.addLayout(izq, 5)
+        fila_busca = QHBoxLayout()
+        fila_busca.addWidget(etiqueta("¿Qué trae el cliente?", "subtitulo"), 1)
+        self.filtro = QLineEdit()
+        self.filtro.setPlaceholderText("🔍 Buscar (F2)")
+        self.filtro.setClearButtonEnabled(True)
+        self.filtro.setMaximumWidth(240)
+        fila_busca.addWidget(self.filtro)
+        izq.addLayout(fila_busca)
+
+        self.pila = QStackedWidget()
+        # página 0: inicio (kilo + categorías)
+        inicio = QWidget()
+        li = QVBoxLayout(inicio)
+        li.setContentsMargins(0, 0, 0, 0)
+        li.setSpacing(10)
+        self.b_kilo = BotonGrande("🧺", "Ropa por kilo", DETALLE_KILO, alto=116, destacado=True)
+        self.b_kilo.clicked.connect(self.abrir_kilo)
+        li.addWidget(self.b_kilo)
+        li.addWidget(etiqueta("Por pieza", "subtitulo"))
+        area_cat, self.rej_cat = _rejilla_con_scroll()
+        li.addWidget(area_cat, 1)
+        self.pila.addWidget(inicio)
+        # página 1: opciones de una categoría o resultados de búsqueda
+        opciones = QWidget()
+        lo = QVBoxLayout(opciones)
+        lo.setContentsMargins(0, 0, 0, 0)
+        lo.setSpacing(10)
+        cab = QHBoxLayout()
+        self.b_regresar = QPushButton("←  Regresar")
+        self.b_regresar.setMinimumSize(150, 48)
+        self.b_regresar.setStyleSheet("font-size: 12pt; font-weight: 600;")
+        self.b_regresar.clicked.connect(self.ir_inicio)
+        self.lb_cat = QLabel()
+        self.lb_cat.setStyleSheet("font-size: 16pt; font-weight: 700;")
+        cab.addWidget(self.b_regresar)
+        cab.addSpacing(8)
+        cab.addWidget(self.lb_cat, 1)
+        lo.addLayout(cab)
+        self.lb_vacio = etiqueta("", "suave", True)
+        self.lb_vacio.setAlignment(Qt.AlignCenter)
+        self.lb_vacio.setStyleSheet("font-size: 12pt; padding: 30px;")
+        lo.addWidget(self.lb_vacio)
+        area_op, self.rej_op = _rejilla_con_scroll()
+        lo.addWidget(area_op, 1)
+        self.pila.addWidget(opciones)
+        izq.addWidget(self.pila, 1)
+
+        self.aviso = etiqueta("", "chip_ok")
+        self.aviso.setAlignment(Qt.AlignCenter)
+        self.aviso.setMinimumHeight(34)
+        self.aviso.setVisible(False)
+        izq.addWidget(self.aviso)
+        raiz.addLayout(izq, 6)
 
         # ---- derecha: la orden
         der = tarjeta()
         dl = QVBoxLayout(der)
         dl.setContentsMargins(14, 14, 14, 14)
         dl.addWidget(etiqueta("Orden", "subtitulo"))
-        self.tabla_carrito = crear_tabla(["Servicio", "Cantidad", "Precio", "Importe"], derecha=(1, 2, 3))
+        self.tabla_carrito = crear_tabla(["Servicio", "Cantidad", "Importe"], derecha=(1, 2))
+        self.tabla_carrito.verticalHeader().setDefaultSectionSize(44)
+        self.tabla_carrito.setStyleSheet("font-size: 11.5pt;")
         dl.addWidget(self.tabla_carrito, 1)
         fila_q = QHBoxLayout()
-        self.b_quitar = QPushButton("Quitar línea (Supr)")
-        fila_q.addWidget(self.b_quitar)
+        self.b_menos = QPushButton("－")
+        self.b_mas = QPushButton("＋")
+        self.b_quitar = QPushButton("🗑  Quitar")
+        for b, tip in ((self.b_menos, "Una pieza menos"), (self.b_mas, "Una pieza más")):
+            b.setToolTip(tip)
+            b.setMinimumSize(64, 48)
+            b.setStyleSheet("font-size: 18pt; font-weight: 700;")
+        self.b_quitar.setMinimumHeight(48)
+        self.b_quitar.setProperty("rol", "peligro")
+        fila_q.addWidget(self.b_menos)
+        fila_q.addWidget(self.b_mas)
         fila_q.addStretch(1)
+        fila_q.addWidget(self.b_quitar)
         dl.addLayout(fila_q)
         self.lb_subtotal = etiqueta("", "suave")
         dl.addWidget(self.lb_subtotal)
@@ -122,16 +179,20 @@ class MostradorView(QWidget):
         self.entrega = QDateTimeEdit()
         self.entrega.setCalendarPopup(True)
         self.entrega.setDisplayFormat("dd/MM/yyyy HH:mm")
+        self.entrega.setMinimumHeight(38)
         fila_f.addWidget(self.entrega, 1)
         dl.addLayout(fila_f)
         self.obs = QLineEdit()
-        self.obs.setPlaceholderText("Observaciones (opcional)")
+        self.obs.setPlaceholderText("Observaciones (opcional): manchas, botones, etc.")
+        self.obs.setMinimumHeight(38)
         dl.addWidget(self.obs)
         fila_b = QHBoxLayout()
-        self.b_limpiar = QPushButton("Limpiar (Esc)")
-        self.b_guardar = QPushButton("Guardar y cobrar (F5)")
+        self.b_limpiar = QPushButton("Empezar de nuevo")
+        self.b_limpiar.setMinimumHeight(56)
+        self.b_guardar = QPushButton("✔  Guardar y cobrar")
         self.b_guardar.setProperty("rol", "primario")
-        self.b_guardar.setMinimumHeight(40)
+        self.b_guardar.setMinimumHeight(56)
+        self.b_guardar.setStyleSheet("font-size: 14pt;")
         fila_b.addWidget(self.b_limpiar)
         fila_b.addWidget(self.b_guardar, 1)
         dl.addLayout(fila_b)
@@ -139,13 +200,13 @@ class MostradorView(QWidget):
 
         # ---- señales y atajos
         self.filtro.textChanged.connect(self._filtrar)
-        self.filtro.returnPressed.connect(self._ir_a_cantidad)
-        self.tabla_serv.itemActivated.connect(lambda *_: self._ir_a_cantidad())
-        self.tabla_serv.itemSelectionChanged.connect(self._mostrar_unidad)
-        self.cantidad.returnPressed.connect(self._agregar)
-        self.b_agregar.clicked.connect(self._agregar)
+        self.filtro.returnPressed.connect(self._elegir_primero)
+        self.b_menos.clicked.connect(lambda: self._sumar(-1))
+        self.b_mas.clicked.connect(lambda: self._sumar(1))
         self.b_quitar.clicked.connect(self._quitar)
-        self.b_limpiar.clicked.connect(self.limpiar)
+        self.tabla_carrito.itemSelectionChanged.connect(self._estado_botones)
+        self.tabla_carrito.itemDoubleClicked.connect(lambda *_: self._sumar(0))
+        self.b_limpiar.clicked.connect(lambda: self.limpiar(preguntar=True))
         self.b_guardar.clicked.connect(self.guardar)
         self.b_nuevo_cli.clicked.connect(self.nuevo_cliente)
         self.b_quitar_cli.clicked.connect(self._quitar_cliente)
@@ -153,19 +214,43 @@ class MostradorView(QWidget):
         self.completer.activated[str].connect(self._elegir_cliente)
         self.descuento.textChanged.connect(self._refrescar_totales)
         for tecla, accion in (("F2", self.filtro.setFocus), ("F3", self.cliente.setFocus), ("F4", self.nuevo_cliente),
-                              ("F5", self.guardar), ("Esc", self.limpiar)):
+                              ("F5", self.guardar), ("Esc", self._escape)):
             QShortcut(QKeySequence(tecla), self, activated=accion)
         QShortcut(QKeySequence(Qt.Key_Delete), self.tabla_carrito, activated=self._quitar,
                   context=Qt.WidgetWithChildrenShortcut)
+        self._estado_botones()
 
     # ---------------------------------------------------------------- datos
     def al_mostrar(self):
-        ok, servicios = seguro(self, catalogo.listar_servicios, self.ctx.conn)
+        ok, cats = seguro(self, catalogo.listar_categorias, self.ctx.conn)
+        ok2, servicios = seguro(self, catalogo.listar_servicios, self.ctx.conn)
+        self.categorias = cats or []
         self.servicios = servicios or []
-        self._filtrar()
+        self._armar_categorias()
         self._fecha_por_defecto()
         self.descuento.setVisible(self.ctx.es_admin)
-        self.filtro.setFocus()
+        self.filtro.clear()
+        self.ir_inicio()
+
+    def _de_categoria(self, cat_id: int) -> list[dict]:
+        return [s for s in self.servicios if s["categoria_id"] == cat_id]
+
+    def _armar_categorias(self):
+        _vaciar(self.rej_cat)
+        self.cat_kilo = next((c for c in self.categorias if es_categoria_kilo(c["nombre"])), None)
+        self.b_kilo.setVisible(self.cat_kilo is not None)
+        if self.cat_kilo:
+            kilos = self._de_categoria(self.cat_kilo["id"])
+            precio = f"{dinero(kilos[0]['precio'])} el kilo · " if len(kilos) == 1 else ""
+            self.b_kilo.lb_detalle.setText(precio + DETALLE_KILO)
+        otras = [c for c in self.categorias if c is not self.cat_kilo]
+        for i, c in enumerate(otras):
+            n = len(self._de_categoria(c["id"]))
+            detalle = f"{n} opción" if n == 1 else (f"{n} opciones" if n else "Sin opciones aún")
+            b = BotonGrande(icono_para(c["nombre"]), c["nombre"], detalle, COLORES[i % len(COLORES)])
+            b.clicked.connect(lambda _=False, c=c: self.abrir_categoria(c))
+            self.rej_cat.addWidget(b, i // COLUMNAS, i % COLUMNAS)
+        self.rej_cat.setRowStretch(self.rej_cat.rowCount(), 1)
 
     def _fecha_por_defecto(self):
         try:
@@ -175,52 +260,134 @@ class MostradorView(QWidget):
         d = datetime.now().replace(second=0, microsecond=0) + timedelta(days=dias)
         self.entrega.setDateTime(d)
 
+    # ------------------------------------------------------------ navegación
+    def ir_inicio(self):
+        self.visibles = []
+        self.pila.setCurrentIndex(0)
+
+    def abrir_kilo(self):
+        if not self.cat_kilo:
+            return
+        kilos = self._de_categoria(self.cat_kilo["id"])
+        if len(kilos) == 1:
+            self.elegir(kilos[0])
+        else:
+            self.abrir_categoria(self.cat_kilo)
+
+    def abrir_categoria(self, cat: dict):
+        self._mostrar_opciones(f"{icono_para(cat['nombre'])}  {cat['nombre']}", self._de_categoria(cat["id"]),
+                               "Todavía no hay opciones en esta categoría.\n"
+                               "El administrador las agrega en «Servicios y precios».")
+
+    def _mostrar_opciones(self, titulo: str, servicios: list[dict], vacio: str):
+        self.visibles = servicios
+        self.lb_cat.setText(titulo)
+        _vaciar(self.rej_op)
+        self.lb_vacio.setText(vacio)
+        self.lb_vacio.setVisible(not servicios)
+        orden_cat = {c["id"]: i for i, c in enumerate(self.categorias)}
+        for i, s in enumerate(servicios):
+            unidad = "por kilo" if s["unidad"] == "kilo" else "por pieza"
+            colores = COLORES[orden_cat.get(s["categoria_id"], 0) % len(COLORES)]
+            b = BotonGrande("", s["nombre"], f"{dinero(s['precio'])} {unidad}", colores, alto=92)
+            b.lb_icono.setVisible(False)
+            b.lb_detalle.setStyleSheet("font-size: 12pt; font-weight: 600; color: #0B3C9E; background: transparent;")
+            b.clicked.connect(lambda _=False, s=s: self.elegir(s))
+            self.rej_op.addWidget(b, i // COLUMNAS, i % COLUMNAS)
+        self.rej_op.setRowStretch(self.rej_op.rowCount(), 1)
+        self.pila.setCurrentIndex(1)
+
     def _filtrar(self):
-        q = _norm(self.filtro.text())
-        self.visibles = [s for s in self.servicios if q in _norm(s["nombre"])]
-        poblar(self.tabla_serv, [(s["id"], [s["nombre"], UNIDADES[s["unidad"]], dinero(s["precio"])]) for s in self.visibles])
+        q = normalizar(self.filtro.text().strip())
+        if not q:
+            self.ir_inicio()
+            return
+        encontrados = [s for s in self.servicios if q in normalizar(s["nombre"])]
+        self._mostrar_opciones(f"🔍  «{self.filtro.text().strip()}»", encontrados, "No se encontró nada con ese nombre.")
+
+    def _elegir_primero(self):
         if self.visibles:
-            self.tabla_serv.selectRow(0)
-        self._mostrar_unidad()
+            self.elegir(self.visibles[0])
 
-    def _servicio_actual(self) -> dict | None:
-        r = self.tabla_serv.currentRow()
-        return self.visibles[r] if 0 <= r < len(self.visibles) else None
+    def _escape(self):
+        if self.filtro.text():
+            self.filtro.clear()
+        elif self.pila.currentIndex() == 1:
+            self.ir_inicio()
+        else:
+            self.limpiar(preguntar=True)
 
-    def _mostrar_unidad(self):
-        s = self._servicio_actual()
-        self.lb_unidad.setText(("kilos" if s["unidad"] == "kilo" else "piezas") if s else "")
+    # ---------------------------------------------------------------- orden
+    def pedir_kilos(self, servicio: dict, actual: Decimal | None = None) -> Decimal | None:
+        dlg = KilosDialog(self, servicio, actual)
+        return dlg.kilos if dlg.exec() else None
 
-    def _ir_a_cantidad(self):
-        if self._servicio_actual():
-            self.cantidad.setFocus()
-            self.cantidad.selectAll()
+    def elegir(self, servicio: dict):
+        """Kilo: pide los kilos. Pieza: agrega una pieza en cada toque."""
+        if servicio["unidad"] == "kilo":
+            kilos = self.pedir_kilos(servicio)
+            if kilos is None:
+                return
+            self.agregar(servicio, kilos)
+        else:
+            self.agregar(servicio, Decimal(1))
 
-    def _agregar(self):
-        s = self._servicio_actual()
-        if not s:
-            QMessageBox.information(self, "Oceánica", "Elige un servicio de la lista.")
-            return
-        ok, _ = seguro(self, self.carrito.agregar, s, a_decimal(self.cantidad.text()))
+    def agregar(self, servicio: dict, cantidad: Decimal) -> bool:
+        ok, _ = seguro(self, self.carrito.agregar, servicio, cantidad)
         if not ok:
-            self.cantidad.setFocus()
-            return
-        self.cantidad.clear()
-        self.filtro.clear()
+            return False
         self._refrescar_carrito()
-        self.filtro.setFocus()
+        fila = next(i for i, l in enumerate(self.carrito.lineas) if l.servicio_id == servicio["id"])
+        self.tabla_carrito.selectRow(fila)
+        texto = cantidad_txt(cantidad, servicio["unidad"]).replace("pza", "pieza" if cantidad == 1 else "piezas")
+        self._avisar(f"✔  Se agregó: {servicio['nombre']} ({texto})")
+        return True
+
+    def _avisar(self, texto: str):
+        chip(self.aviso, texto, "chip_ok")
+        self.aviso.setVisible(True)
+        QTimer.singleShot(3000, lambda: self.aviso.setVisible(False) if self.aviso.text() == texto else None)
+
+    def _linea_actual(self) -> int:
+        return self.tabla_carrito.currentRow()
+
+    def _sumar(self, delta: int):
+        """＋/－ en piezas. En kilos (o con doble clic) abre el teclado para cambiar la cantidad."""
+        r = self._linea_actual()
+        if not 0 <= r < len(self.carrito.lineas):
+            return
+        l = self.carrito.lineas[r]
+        if l.unidad == "kilo" or delta == 0:
+            if l.unidad == "kilo":
+                nuevo = self.pedir_kilos({"nombre": l.nombre, "precio": l.precio}, l.cantidad)
+            else:
+                return
+            if nuevo is None:
+                return
+            seguro(self, self.carrito.fijar, r, nuevo)
+        else:
+            self.carrito.sumar(r, delta)
+        self._refrescar_carrito()
+        if r < len(self.carrito.lineas):
+            self.tabla_carrito.selectRow(r)
 
     def _quitar(self):
-        r = self.tabla_carrito.currentRow()
+        r = self._linea_actual()
         if r >= 0:
             self.carrito.quitar(r)
             self._refrescar_carrito()
 
+    def _estado_botones(self):
+        hay = 0 <= self._linea_actual() < len(self.carrito.lineas)
+        for b in (self.b_menos, self.b_mas, self.b_quitar):
+            b.setEnabled(hay)
+
     def _refrescar_carrito(self):
-        filas = [(i, [l.nombre, cantidad_txt(l.cantidad, l.unidad), dinero(l.precio), dinero(l.importe)])
+        filas = [(i, [l.nombre, cantidad_txt(l.cantidad, l.unidad), dinero(l.importe)])
                  for i, l in enumerate(self.carrito.lineas)]
         poblar(self.tabla_carrito, filas)
         self._refrescar_totales()
+        self._estado_botones()
 
     def _refrescar_totales(self):
         d = a_decimal(self.descuento.text()) if self.ctx.es_admin else None
@@ -249,7 +416,6 @@ class MostradorView(QWidget):
         self.cliente_id = self.mapa_clientes.get(etiqueta_)
         if self.cliente_id:
             self.info_cli.setText("✔ Cliente seleccionado")
-            self.filtro.setFocus()
 
     def _quitar_cliente(self):
         self.cliente.clear()
@@ -269,29 +435,30 @@ class MostradorView(QWidget):
             self.cliente.setText(" ".join(filter(None, [v["nombre"].strip(), v["apellidos"].strip()])))
             self.cliente_id = nuevo
             self.info_cli.setText("✔ Cliente creado y seleccionado")
-            self.filtro.setFocus()
 
     # --------------------------------------------------------------- guardar
-    def limpiar(self):
+    def limpiar(self, preguntar: bool = False):
+        if preguntar and self.carrito:
+            r = QMessageBox.question(self, "Empezar de nuevo", "¿Borrar todo lo que llevas en esta orden?")
+            if r != QMessageBox.Yes:
+                return
         self.carrito.limpiar()
         self.descuento.clear()
         self.obs.clear()
         self._quitar_cliente()
-        self.cantidad.clear()
         self.filtro.clear()
         self._refrescar_carrito()
         self._fecha_por_defecto()
-        self.filtro.setFocus()
+        self.ir_inicio()
 
     def guardar(self):
         if not self.carrito:
             QMessageBox.information(self, "Oceánica", "Agrega al menos un servicio a la orden.")
-            self.filtro.setFocus()
             return
         if self.cliente.text().strip() and self.cliente_id is None:
             r = QMessageBox.question(self, "Cliente sin seleccionar",
                                      "Escribiste un cliente pero no lo elegiste de la lista.\n"
-                                     "¿Guardar la orden como venta de mostrador (sin cliente)?")
+                                     "¿Guardar la orden sin cliente?")
             if r != QMessageBox.Yes:
                 self.cliente.setFocus()
                 return
@@ -317,4 +484,3 @@ class MostradorView(QWidget):
         TicketDialog(self, tickets.ticket_orden_texto(self.ctx.conn, oid), f"{orden['folio']}.pdf",
                      f"Orden {orden['folio']} creada",
                      imprimir=lambda: tickets.imprimir_ticket_orden(self.ctx.conn, oid)).exec()
-        self.filtro.setFocus()

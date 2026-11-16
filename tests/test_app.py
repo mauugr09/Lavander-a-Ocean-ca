@@ -51,6 +51,13 @@ def test_carrito_totales_y_validaciones():
     assert c.items() == [{"servicio_id": 1, "cantidad": D("4.50")}, {"servicio_id": 2, "cantidad": D("2.00")}]
     c.quitar(0)
     assert len(c.lineas) == 1
+    c.sumar(0, 1)
+    assert c.lineas[0].cantidad == D("3")
+    with pytest.raises(ValueError, match="entero"):
+        c.fijar(0, D("2.5"))
+    c.fijar(0, D("1"))
+    c.sumar(0, -1)                                   # llega a cero: se quita la línea
+    assert not c
 
 
 # ---------- con base de datos -----------------------------------------------------
@@ -119,9 +126,24 @@ def test_flujo_completo_por_pantalla(qapp, conn, admin, empleado, mundo, monkeyp
     m.filtro.setText("tintoreria")                   # la búsqueda es solo por nombre del servicio
     assert m.visibles == []
     m.filtro.setText("")
-    m.tabla_serv.selectRow(0)
-    m.cantidad.setText("4")
-    m._agregar()
+    assert m.pila.currentIndex() == 0                # sin búsqueda vuelve a los botones de categorías
+    # piezas: abrir la categoría y tocar la opción (cada toque es una pieza; ＋/－ ajustan)
+    planchado = next(c for c in m.categorias if c["nombre"] == "Planchado")
+    m.abrir_categoria(planchado)
+    assert [s["nombre"] for s in m.visibles] == ["Edredón"]
+    m.elegir(m.visibles[0])
+    m.elegir(m.visibles[0])
+    assert m.lb_total.text() == "$240.00"
+    m.tabla_carrito.selectRow(0)
+    m._sumar(-1)
+    m._quitar()
+    assert not m.carrito
+    # ropa por kilo: el botón grande abre el teclado (aquí simulado) con los kilos de la báscula
+    m.pedir_kilos = lambda servicio, actual=None: D("3") if actual is None else D("4")
+    m.abrir_kilo()
+    assert m.lb_total.text() == "$85.50"
+    m.tabla_carrito.selectRow(0)
+    m._sumar(1)                                      # en kilos, ＋ abre el teclado para corregir
     assert m.lb_total.text() == "$114.00"
     cid = clientes.crear_cliente(conn, admin, "Ana", "Torres", "5511112222")
     m.cliente_id = cid
@@ -159,9 +181,7 @@ def test_mostrador_sin_caja_no_cobra_anticipo(qapp, conn, admin, mundo, monkeypa
     from oceanica.app.v_mostrador import MostradorView
     m = MostradorView(ctx)
     m.al_mostrar()
-    m.tabla_serv.selectRow(0)
-    m.cantidad.setText("2")
-    m._agregar()
+    m.agregar(m.servicios[0], D("2"))
     m.guardar()
     assert any("No hay caja abierta" in a for a in avisos)
     assert ordenes.listar_ordenes(conn) == []  # no se creó nada

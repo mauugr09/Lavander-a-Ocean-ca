@@ -37,6 +37,26 @@ class Carrito:
                 return
         self.lineas.append(Linea(servicio["id"], servicio["nombre"], servicio["unidad"], Decimal(servicio["precio"]), cantidad))
 
+    def sumar(self, indice: int, delta: int) -> None:
+        """Suma o resta piezas a una línea; si llega a cero, la línea se quita."""
+        if not 0 <= indice < len(self.lineas):
+            return
+        l = self.lineas[indice]
+        l.cantidad += Decimal(delta)
+        if l.cantidad <= 0:
+            del self.lineas[indice]
+
+    def fijar(self, indice: int, cantidad: Decimal | None) -> None:
+        """Cambia la cantidad de una línea (por ejemplo, los kilos)."""
+        if not 0 <= indice < len(self.lineas):
+            return
+        if cantidad is None or cantidad <= 0:
+            raise ValueError("Escribe una cantidad mayor que cero.")
+        l = self.lineas[indice]
+        if l.unidad == "pieza" and cantidad != cantidad.to_integral_value():
+            raise ValueError(f"'{l.nombre}' se cobra por pieza: la cantidad debe ser un número entero.")
+        l.cantidad = cantidad.quantize(CENTAVO)
+
     def quitar(self, indice: int) -> None:
         if 0 <= indice < len(self.lineas):
             del self.lineas[indice]

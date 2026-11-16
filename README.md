@@ -8,7 +8,7 @@ La aplicación de escritorio (PySide6) se inicia con `python -m oceanica`. Falta
 
 | Ruta | Contenido |
 |---|---|
-| `db/migrations/001..005` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar |
+| `db/migrations/001..007` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente y categorías del mostrador |
 | `oceanica/init_db.py` | Instalador: crea la base, un usuario MySQL limitado y el primer administrador |
 | `oceanica/migrar.py` | Aplica migraciones pendientes al actualizar el sistema |
 | `oceanica/respaldos.py` | Respaldo `.sql.gz` con mysqldump, copia externa, retención y restauración |
@@ -49,8 +49,9 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 
 - Entrada: **mostrador** (sin contraseña) o **administrador** (usuario y contraseña; se cierra solo tras 10 minutos sin actividad).
 - En el mostrador, cada orden, cobro, entrega, apertura/cierre de caja y llegada/salida pide el **PIN** de quien la hace. Consultar y editar clientes reutiliza la identidad 2 minutos.
-- Atajos: F2 buscar servicio · F3 cliente (en Órdenes: buscar) · F4 cliente nuevo · F5 guardar y cobrar · Esc limpiar · F6 cobrar saldo · F7 entregar · Ctrl+1…9 cambiar de sección.
-- Captura rápida: escribe parte del nombre del servicio, Enter, cantidad, Enter. La búsqueda ignora acentos y mayúsculas.
+- **Nueva orden con botones grandes**: «Ropa por kilo» (playeras, ropa interior, sudaderas, pantalones y sábanas) abre un teclado numérico para los kilos de la báscula. Las demás categorías (Colchas y edredones, Cobijas, Chamarras y abrigos, Cojines, Cortinas, Calzado, Planchado, Estilo tintorería, Otros) muestran sus opciones con precio; cada toque agrega una pieza. En la orden, ＋/－ cambian las piezas (en kilos abren el teclado) y «Quitar» borra la línea. Las opciones y precios se registran en «Servicios y precios».
+- Atajos: F2 buscar servicio · F3 cliente (en Órdenes: buscar) · F4 cliente nuevo · F5 guardar y cobrar · Esc regresar (en el inicio: empezar de nuevo, con confirmación) · F6 cobrar saldo · F7 entregar · Ctrl+1…9 cambiar de sección.
+- Búsqueda: escribe parte del nombre del servicio y Enter elige el primero. Ignora acentos y mayúsculas.
 - Los tickets se muestran en pantalla; se imprimen en la térmica (Windows + pywin32, nombre en la configuración `impresora_ticket`) o se abren como PDF (carpeta `tickets/`).
 - Registro de errores: `logs/oceanica.log`.
 

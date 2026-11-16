@@ -10,8 +10,8 @@ UNIDADES = ("kilo", "pieza")
 def listar_categorias(conn, solo_activas: bool = True) -> list[dict]:
     with transaccion(conn) as cur:
         cur.execute(
-            "SELECT id, nombre, activo FROM categorias_servicio "
-            + ("WHERE activo = 1 " if solo_activas else "") + "ORDER BY nombre"
+            "SELECT id, nombre, orden, activo FROM categorias_servicio "
+            + ("WHERE activo = 1 " if solo_activas else "") + "ORDER BY orden, nombre"
         )
         return cur.fetchall()
 
