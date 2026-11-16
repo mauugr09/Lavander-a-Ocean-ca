@@ -52,3 +52,19 @@ def test_panel_ventas_avance_y_mejores(conn, admin, empleado):
     serv = panel.servicios_top(conn, "2026-10-01", "2026-11-30")
     assert [s["servicio"] for s in serv] == ["Edredón", "Lavado y secado"] and serv[0]["importe"] == D("750")
     assert panel.variacion(D("50"), D("0")) is None
+
+
+def test_datos_de_ejemplo_dejan_una_base_coherente(conn, admin):
+    from oceanica import datos_demo
+    r = datos_demo.generar(conn, dias=20)
+    assert r["ordenes"] > 20 and r["clientes"] == 20 and len(r["pines"]) == 3
+    assert not caja.corte_abierto(conn)                                   # la caja de ejemplo quedó cerrada
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT COUNT(*) AS n FROM cortes_caja WHERE diferencia <> 0")
+    assert cur.fetchone()["n"] == 0
+    cur.execute("SELECT estado, COUNT(*) AS n FROM ordenes GROUP BY estado")
+    estados = {f["estado"]: f["n"] for f in cur.fetchall()}
+    assert {"recibida", "en_proceso", "lista", "entregada"} <= set(estados)
+    cur.execute("SELECT COUNT(*) AS n FROM v_saldo_ordenes WHERE estado = 'entregada' AND saldo <> 0")
+    assert cur.fetchone()["n"] == 0                                       # lo entregado está pagado
+    assert panel.resumen(conn)["mes"]["vendido"] >= 0

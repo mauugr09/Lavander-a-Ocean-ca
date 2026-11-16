@@ -99,6 +99,10 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 
 Es todo o nada: si una fila falla, no se guarda nada y se devuelve el número de fila con el error. Lo ya existente se omite.
 
+## Datos de ejemplo (solo para probar)
+
+En una base recién creada con `init_db`: `python -m oceanica.datos_demo`. Crea servicios con precios, 3 empleados con PIN (Rosa 482615, Jorge 739164, Patricia 516273), 20 clientes, insumos y un año de órdenes cobradas, más órdenes abiertas en varios estados. Si la base ya tiene órdenes no hace nada. **Nunca se ejecuta en la computadora de la lavandería.**
+
 ## Pruebas
 
 `pip install -r requirements.txt` y `python -m pytest`. Las pruebas de servicios necesitan un servidor MySQL/MariaDB con un usuario
