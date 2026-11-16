@@ -42,6 +42,7 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 - **Hora extra**: solo la que autoriza la encargada (Asistencia → «Ajustes de la encargada»), a $50 por hora (`nomina_pago_hora_extra`).
 - **Horarios**: matutino 9-15, vespertino 12-18, sábado 9-17; cada empleado tiene su día de descanso (Empleados y usuarios → «Horario…»). Los días de descanso no generan avisos. Tolerancia de entrada: 10 min, el retardo solo se registra.
 - **Pago**: en efectivo (sale de la caja) o por transferencia (no mueve la caja), con recibo PDF para firma.
+- **Panel del negocio** (administrador): vendido hoy, en la semana y en el mes contra el periodo anterior; ventas de los últimos 12 meses con el mejor mes resaltado; avance del mes día por día contra el mes anterior; clientes más frecuentes, servicios que más venden, formas de pago y datos del periodo (este mes, últimos 3 meses o este año). Usa Qt Charts, incluido en PySide6.
 - **Entrega**: con saldo o con transferencia por confirmar, el empleado pide autorización a la encargada (usuario y contraseña de administrador). Transferencias: basta la captura de pantalla; la encargada confirma después en el banco.
 - Impresora de tickets: térmica genérica ESC/POS de 80 mm.
 

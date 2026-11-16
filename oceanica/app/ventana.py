@@ -17,6 +17,7 @@ from .v_clientes import ClientesView
 from .v_config import ConfigView
 from .v_mostrador import MostradorView
 from .v_ordenes import OrdenesView
+from .v_panel import PanelView
 from .v_inventario import InventarioView
 from .v_nomina import NominaView
 from .v_personal import PersonalView
@@ -28,7 +29,7 @@ INACTIVIDAD_ADMIN_MS = 10 * 60 * 1000  # el administrador se cierra solo tras 10
 
 ICONOS_MENU = {
     "Nueva orden": "file-plus", "Órdenes": "clipboard-list", "Caja": "cash-register", "Clientes": "users",
-    "Asistencia": "clock-hour-4", "Inventario": "package", "Reportes": "chart-bar", "Nómina": "wallet",
+    "Asistencia": "clock-hour-4", "Inventario": "package", "Panel del negocio": "layout-dashboard", "Reportes": "file-analytics", "Nómina": "wallet",
     "Servicios y precios": "tag", "Empleados y usuarios": "id-badge-2", "Transferencias": "arrows-exchange",
     "Configuración": "settings",
 }
@@ -104,13 +105,13 @@ class Ventana(QMainWindow):
         paginas = [MostradorView(self.ctx), OrdenesView(self.ctx), CajaView(self.ctx), ClientesView(self.ctx), AsistenciaView(self.ctx),
                    InventarioView(self.ctx)]
         if sesion_admin:
-            paginas += [ReportesView(self.ctx), NominaView(self.ctx), CatalogoView(self.ctx), PersonalView(self.ctx), TransferenciasView(self.ctx),
+            paginas += [PanelView(self.ctx), ReportesView(self.ctx), NominaView(self.ctx), CatalogoView(self.ctx), PersonalView(self.ctx), TransferenciasView(self.ctx),
                         ConfigView(self.ctx)]
         self.paginas = paginas
 
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
-        self.nav.setFixedWidth(250)
+        self.nav.setFixedWidth(272)
         self.nav.setFocusPolicy(Qt.NoFocus)
         self.nav.setIconSize(QSize(24, 24))
         self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)

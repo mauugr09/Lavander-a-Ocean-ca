@@ -94,7 +94,7 @@ def test_todas_las_pantallas_abren(qapp, conn, admin, mundo):
     v = Ventana(ctx)
     v.abrir_shell(admin)
     assert [p.titulo for p in v.paginas] == ["Nueva orden", "Órdenes", "Caja", "Clientes", "Asistencia",
-                                             "Inventario", "Reportes", "Nómina", "Servicios y precios", "Empleados y usuarios",
+                                             "Inventario", "Panel del negocio", "Reportes", "Nómina", "Servicios y precios", "Empleados y usuarios",
                                              "Transferencias", "Configuración"]
     for i in range(len(v.paginas)):
         v.nav.setCurrentRow(i)
