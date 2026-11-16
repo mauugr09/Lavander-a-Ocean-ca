@@ -24,6 +24,7 @@ class Carrito:
     def __init__(self):
         self.lineas: list[Linea] = []
         self.descuento = Decimal("0.00")
+        self.cargo_domicilio = Decimal("0.00")
 
     def agregar(self, servicio: dict, cantidad: Decimal | None) -> None:
         if cantidad is None or cantidad <= 0:
@@ -64,6 +65,7 @@ class Carrito:
     def limpiar(self) -> None:
         self.lineas.clear()
         self.descuento = Decimal("0.00")
+        self.cargo_domicilio = Decimal("0.00")
 
     @property
     def subtotal(self) -> Decimal:
@@ -71,7 +73,7 @@ class Carrito:
 
     @property
     def total(self) -> Decimal:
-        return max(self.subtotal - self.descuento, Decimal("0.00"))
+        return max(self.subtotal - self.descuento, Decimal("0.00")) + self.cargo_domicilio
 
     def items(self) -> list[dict]:
         return [{"servicio_id": l.servicio_id, "cantidad": l.cantidad} for l in self.lineas]

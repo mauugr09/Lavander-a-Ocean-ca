@@ -81,6 +81,8 @@ def ticket_orden_texto(conn, orden_id: int) -> str:
     L.append(_par("Subtotal", _dinero(o["subtotal"]), ancho))
     if Decimal(o["descuento"]) > 0:
         L.append(_par("Descuento", "-" + _dinero(o["descuento"]), ancho))
+    if o.get("tipo_entrega") == "domicilio":
+        L.append(_par("Servicio a domicilio", _dinero(o["cargo_domicilio"]), ancho))
     L.append(_par("TOTAL", _dinero(o["total"]), ancho))
     for p in o["pagos"]:
         signo = "-" if p["tipo"] == "reembolso" else ""
@@ -88,6 +90,10 @@ def ticket_orden_texto(conn, orden_id: int) -> str:
         L.append(_par(f"{p['tipo'].capitalize()} ({p['metodo']}){marca}", signo + _dinero(p["monto"]), ancho))
     L.append(_par("SALDO PENDIENTE", _dinero(o["saldo"]), ancho))
     L += [sep, f"Entrega: {_fecha(o['fecha_promesa'])}"]
+    if o.get("tipo_entrega") == "domicilio":
+        L += ["SERVICIO A DOMICILIO", *textwrap.wrap("Entregar en: " + (o["direccion_entrega"] or ""), ancho)]
+    else:
+        L.append("Recoge en mostrador")
     if o["observaciones"]:
         L += textwrap.wrap("Nota: " + o["observaciones"], ancho)
     if o["estado"] == "cancelada":

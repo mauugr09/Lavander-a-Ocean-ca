@@ -510,3 +510,28 @@ def test_cambiar_de_seccion_no_abre_ventanitas_sueltas(qapp, conn, admin, mundo)
         v.cerrar_sesion()
         v.close()
     assert sueltas == []
+
+
+def test_mostrador_servicio_a_domicilio(qapp, conn, admin, empleado, mundo, monkeypatch):
+    _sin_dialogos(monkeypatch)
+    configuracion.establecer(conn, admin, "cargo_domicilio", "30")
+    try:
+        ctx = Contexto(conn)
+        ctx.identificar = lambda *a, **k: empleado
+        from oceanica.app.v_mostrador import MostradorView
+        m = MostradorView(ctx)
+        m.al_mostrar()
+        m.agregar(next(s for s in m.servicios if s["unidad"] == "pieza"), D("1"))   # Edredón $120
+        m.elegir_entrega("domicilio")
+        assert m.cargo.isReadOnly() and m.lb_total.text() == "$150.00"            # el empleado no cambia el cargo
+        avisos = []
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: avisos.append(a[2]))
+        m.guardar()
+        assert avisos and "dirección" in avisos[0] and ordenes.listar_ordenes(conn) == []
+        m.direccion.setText("Calle Pino 4, Col. Centro")
+        m.guardar()
+        o = ordenes.obtener_orden(conn, ordenes.listar_ordenes(conn)[0]["id"])
+        assert o["tipo_entrega"] == "domicilio" and o["total"] == D("150.00")
+        assert m.b_recoge.isChecked() and not m.p_domicilio.isVisibleTo(m)       # la siguiente orden vuelve a mostrador
+    finally:
+        configuracion.establecer(conn, admin, "cargo_domicilio", "0")

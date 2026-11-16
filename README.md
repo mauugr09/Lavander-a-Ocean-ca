@@ -8,7 +8,7 @@ La aplicación de escritorio (PySide6) se inicia con `python -m oceanica`. Falta
 
 | Ruta | Contenido |
 |---|---|
-| `db/migrations/001..007` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente y categorías del mostrador |
+| `db/migrations/001..008` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente, categorías del mostrador y servicio a domicilio |
 | `oceanica/init_db.py` | Instalador: crea la base, un usuario MySQL limitado y el primer administrador |
 | `oceanica/migrar.py` | Aplica migraciones pendientes al actualizar el sistema |
 | `oceanica/respaldos.py` | Respaldo `.sql.gz` con mysqldump, copia externa, retención y restauración |
@@ -50,6 +50,7 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 - Entrada: **mostrador** (sin contraseña) o **administrador** (usuario y contraseña; se cierra solo tras 10 minutos sin actividad).
 - En el mostrador, cada orden, cobro, entrega, apertura/cierre de caja y llegada/salida pide el **PIN** de quien la hace. Consultar y editar clientes reutiliza la identidad 2 minutos.
 - **Nueva orden con botones grandes**: «Ropa por kilo» (playeras, ropa interior, sudaderas, pantalones y sábanas) abre un teclado numérico para los kilos de la báscula. Las demás categorías (Colchas y edredones, Cobijas, Chamarras y abrigos, Cojines, Cortinas, Calzado, Planchado, Estilo tintorería, Otros) muestran sus opciones con precio; cada toque agrega una pieza. En la orden, ＋/－ cambian las piezas (en kilos abren el teclado) y «Quitar» borra la línea. Las opciones y precios se registran en «Servicios y precios».
+- **Entrega**: cada orden se marca «Recoge en mostrador» o «Servicio a domicilio». A domicilio pide la dirección y suma el cargo `cargo_domicilio` de «Configuración» (el empleado no lo cambia; el administrador sí, por orden). Sale en el ticket y en el detalle.
 - **Cobro por pasos**: «¿Cómo va a pagar?» (todo ahora, anticipo o al recoger) → «¿Con qué paga?» (efectivo o transferencia) → billetes sugeridos y cambio en grande, o confirmación de la captura del comprobante.
 - **Identificación con PIN**: el empleado toca su nombre y escribe su PIN en un teclado grande.
 - Toda la interfaz usa letra grande, botones amplios con íconos de línea (Tabler Icons, licencia MIT, en `oceanica/app/recursos/iconos`) y trato de «usted».

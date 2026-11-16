@@ -17,7 +17,7 @@ from ..servicios import caja, catalogo, clientes, configuracion, ordenes, ticket
 from .botones import COLORES, BotonGrande, KilosDialog, es_categoria_kilo, icono_para, normalizar
 from . import tema
 from .carrito import Carrito
-from .iconos import en_buscador, poner
+from .iconos import en_buscador, icono, poner
 from .dialogos import ClienteDialog, CobroDialog, TicketDialog
 from .util import a_decimal, cantidad_txt, chip, crear_tabla, dinero, etiqueta, poblar, seguro, tarjeta
 
@@ -179,7 +179,7 @@ class MostradorView(QWidget):
         self.lb_total.setAlignment(Qt.AlignRight)
         dl.addWidget(self.lb_total)
         fila_f = QHBoxLayout()
-        fila_f.addWidget(QLabel("Entrega"))
+        fila_f.addWidget(QLabel("Fecha de entrega"))
         self.entrega = QDateTimeEdit()
         self.entrega.setCalendarPopup(True)
         self.entrega.setDisplayFormat("dd/MM/yyyy HH:mm")
@@ -190,6 +190,37 @@ class MostradorView(QWidget):
         self.obs.setPlaceholderText("Observaciones (opcional): manchas, botones, etc.")
         self.obs.setMinimumHeight(38)
         dl.addWidget(self.obs)
+        # ---- ¿cómo se entrega? recoge en mostrador o servicio a domicilio (con cargo extra)
+        fila_e = QHBoxLayout()
+        self.b_recoge = poner(QPushButton("Recoge en mostrador"), "building-store")
+        self.b_domicilio = poner(QPushButton("Servicio a domicilio"), "truck-delivery")
+        for b in (self.b_recoge, self.b_domicilio):
+            b.setCheckable(True)
+            b.setMinimumHeight(46)
+            b.setStyleSheet(f"QPushButton:checked {{ background: #E6F0FF; border: 2px solid {tema.PRIMARIO}; "
+                            f"color: {tema.PRIMARIO}; font-weight: 600; }}")
+            fila_e.addWidget(b)
+        self.b_recoge.setChecked(True)
+        dl.addLayout(fila_e)
+        self.p_domicilio = QWidget()
+        pd = QVBoxLayout(self.p_domicilio)
+        pd.setContentsMargins(0, 0, 0, 0)
+        pd.setSpacing(6)
+        self.direccion = QLineEdit()
+        self.direccion.setPlaceholderText("Dirección de entrega (calle, número, colonia, referencias)")
+        self.direccion.setMinimumHeight(38)
+        self.direccion.addAction(icono("map-pin", "#5B6F86", 20), QLineEdit.LeadingPosition)
+        pd.addWidget(self.direccion)
+        fila_c = QHBoxLayout()
+        fila_c.addWidget(QLabel("Cargo a domicilio  $"))
+        self.cargo = QLineEdit()
+        self.cargo.setMaximumWidth(120)
+        self.cargo.setMinimumHeight(38)
+        fila_c.addWidget(self.cargo)
+        fila_c.addStretch(1)
+        pd.addLayout(fila_c)
+        dl.addWidget(self.p_domicilio)
+        self.p_domicilio.setVisible(False)
         fila_b = QHBoxLayout()
         self.b_limpiar = QPushButton("Empezar de nuevo")
         self.b_limpiar.setMinimumHeight(56)
@@ -217,6 +248,9 @@ class MostradorView(QWidget):
         self.cliente.textEdited.connect(self._buscar_clientes)
         self.completer.activated[str].connect(self._elegir_cliente)
         self.descuento.textChanged.connect(self._refrescar_totales)
+        self.b_recoge.clicked.connect(lambda: self.elegir_entrega("mostrador"))
+        self.b_domicilio.clicked.connect(lambda: self.elegir_entrega("domicilio"))
+        self.cargo.textChanged.connect(self._refrescar_totales)
         for tecla, accion in (("F2", self.filtro.setFocus), ("F3", self.cliente.setFocus), ("F4", self.nuevo_cliente),
                               ("F5", self.guardar), ("Esc", self._escape)):
             QShortcut(QKeySequence(tecla), self, activated=accion)
@@ -393,10 +427,37 @@ class MostradorView(QWidget):
         self._refrescar_totales()
         self._estado_botones()
 
+    def elegir_entrega(self, tipo: str):
+        domicilio = tipo == "domicilio"
+        self.b_recoge.setChecked(not domicilio)
+        self.b_domicilio.setChecked(domicilio)
+        self.p_domicilio.setVisible(domicilio)
+        if domicilio:
+            ok, cargo = seguro(self, ordenes.cargo_domicilio_configurado, self.ctx.conn)
+            self.cargo.setText(f"{cargo or 0:.2f}")
+            self.cargo.setReadOnly(not self.ctx.es_admin)   # el empleado cobra lo que fijó el administrador
+            self.cargo.setToolTip("" if self.ctx.es_admin else "Lo fija el administrador en «Configuración».")
+            self.direccion.setFocus()
+        else:
+            self.direccion.clear()
+        self._refrescar_totales()
+
+    def es_domicilio(self) -> bool:
+        return self.b_domicilio.isChecked()
+
     def _refrescar_totales(self):
         d = a_decimal(self.descuento.text()) if self.ctx.es_admin else None
         self.carrito.descuento = d if d is not None and d >= 0 else Decimal("0.00")
-        self.lb_subtotal.setText(f"Subtotal: {dinero(self.carrito.subtotal)}" if self.carrito.descuento else "")
+        c = a_decimal(self.cargo.text()) if self.es_domicilio() else None
+        self.carrito.cargo_domicilio = c if c is not None and c >= 0 else Decimal("0.00")
+        partes = []
+        if self.carrito.descuento or self.carrito.cargo_domicilio:
+            partes.append(f"Servicios: {dinero(self.carrito.subtotal)}")
+        if self.carrito.descuento:
+            partes.append(f"Descuento: -{dinero(self.carrito.descuento)}")
+        if self.carrito.cargo_domicilio:
+            partes.append(f"Domicilio: {dinero(self.carrito.cargo_domicilio)}")
+        self.lb_subtotal.setText("  ·  ".join(partes))
         self.lb_total.setText(dinero(self.carrito.total))
 
     # -------------------------------------------------------------- cliente
@@ -449,6 +510,7 @@ class MostradorView(QWidget):
         self.carrito.limpiar()
         self.descuento.clear()
         self.obs.clear()
+        self.elegir_entrega("mostrador")
         self._quitar_cliente()
         self.filtro.clear()
         self._refrescar_carrito()
@@ -466,6 +528,14 @@ class MostradorView(QWidget):
             if r != QMessageBox.Yes:
                 self.cliente.setFocus()
                 return
+        entrega = None
+        if self.es_domicilio():
+            if not self.direccion.text().strip():
+                QMessageBox.information(self, "Oceánica", "Escriba la dirección para el servicio a domicilio.")
+                self.direccion.setFocus()
+                return
+            entrega = {"tipo": "domicilio", "direccion": self.direccion.text().strip(),
+                       "cargo": self.carrito.cargo_domicilio}
         total = self.carrito.total
         dlg = CobroDialog(self.ctx, self, total, "Anticipo de la orden", permite_cero=True)
         if not dlg.exec():
@@ -480,7 +550,7 @@ class MostradorView(QWidget):
             return
         promesa = self.entrega.dateTime().toPython()
         ok, oid = seguro(self, ordenes.crear_orden, self.ctx.conn, sesion, self.carrito.items(), self.cliente_id,
-                         promesa, self.carrito.descuento, self.obs.text() or None, pago)
+                         promesa, self.carrito.descuento, self.obs.text() or None, pago, entrega)
         if not ok:
             return
         orden = ordenes.obtener_orden(self.ctx.conn, oid)

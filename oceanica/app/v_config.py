@@ -22,6 +22,8 @@ class ConfigView(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 16)
         lay.addWidget(etiqueta("Configuración", "titulo"))
+        lay.addWidget(etiqueta("Seleccione un ajuste y pulse «Cambiar valor» (o haga doble clic). "
+                               "Aquí se fija, por ejemplo, el cargo por servicio a domicilio.", "suave", True))
         fila = QHBoxLayout()
         self.b_editar = QPushButton("Cambiar valor")
         self.b_editar.setProperty("rol", "primario")
@@ -30,7 +32,7 @@ class ConfigView(QWidget):
         fila.addStretch(1)
         fila.addWidget(self.b_respaldo)
         lay.addLayout(fila)
-        self.tabla = crear_tabla(["Clave", "Valor", "Qué hace"], estirar=2)
+        self.tabla = crear_tabla(["Ajuste", "Valor"], estirar=0)
         lay.addWidget(self.tabla, 1)
         self.b_editar.clicked.connect(self.editar)
         self.tabla.itemActivated.connect(lambda *_: self.editar())
@@ -39,7 +41,7 @@ class ConfigView(QWidget):
     def al_mostrar(self):
         ok, filas = seguro(self, configuracion.listar, self.ctx.conn)
         self.filas = {f["clave"]: f for f in filas or []}
-        poblar(self.tabla, [(f["clave"], [f["clave"], f["valor"], f["descripcion"] or ""]) for f in self.filas.values()])
+        poblar(self.tabla, [(f["clave"], [f["descripcion"] or f["clave"], f["valor"]]) for f in self.filas.values()])
 
     def editar(self):
         clave = id_seleccionado(self.tabla)
@@ -48,9 +50,9 @@ class ConfigView(QWidget):
         f = self.filas[clave]
         if clave in OPCIONES:
             ops = list(OPCIONES[clave])
-            valor, ok = QInputDialog.getItem(self, clave, f["descripcion"] or clave, ops, max(0, ops.index(f["valor"]) if f["valor"] in ops else 0), False)
+            valor, ok = QInputDialog.getItem(self, "Cambiar ajuste", f["descripcion"] or clave, ops, max(0, ops.index(f["valor"]) if f["valor"] in ops else 0), False)
         else:
-            valor, ok = QInputDialog.getText(self, clave, f["descripcion"] or clave, text=f["valor"])
+            valor, ok = QInputDialog.getText(self, "Cambiar ajuste", f["descripcion"] or clave, text=f["valor"])
         if ok and seguro(self, configuracion.establecer, self.ctx.conn, self.ctx.admin, clave, valor)[0]:
             self.al_mostrar()
 

@@ -15,7 +15,29 @@ ESTADOS = ("recibida", "en_proceso", "lista", "entregada", "cancelada")
 _ORDEN_FLUJO = {"recibida": 0, "en_proceso": 1, "lista": 2, "entregada": 3}
 
 
-def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo) -> int:
+def cargo_domicilio_configurado(conn) -> Decimal:
+    with transaccion(conn) as cur:
+        return dinero(config_valor(cur, "cargo_domicilio", "0") or "0", "cargo_domicilio")
+
+
+def _datos_entrega(cur, sesion, entrega) -> tuple[str, Decimal, str | None]:
+    """(tipo, cargo, dirección). Recoger en mostrador no tiene cargo ni dirección."""
+    tipo = (entrega or {}).get("tipo") or "mostrador"
+    if tipo == "mostrador":
+        return "mostrador", CERO, None
+    if tipo != "domicilio":
+        raise ErrorNegocio("Tipo de entrega no válido.")
+    direccion = texto(entrega.get("direccion"), "dirección de entrega", 255)
+    configurado = dinero(config_valor(cur, "cargo_domicilio", "0") or "0", "cargo_domicilio")
+    cargo = configurado if entrega.get("cargo") is None else dinero(entrega["cargo"], "cargo a domicilio")
+    if cargo < 0:
+        raise ErrorNegocio("El cargo a domicilio no puede ser negativo.")
+    if cargo != configurado and not es_admin(sesion):
+        raise ErrorNegocio("Solo el administrador puede cambiar el cargo a domicilio.")
+    return "domicilio", cargo, direccion
+
+
+def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo, entrega=None) -> int:
     if not items:
         raise ErrorNegocio("Agregue al menos un servicio a la orden.")
     observaciones = texto(observaciones, "observaciones", 300, False)
@@ -49,7 +71,8 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
             tope = Decimal(config_valor(cur, "descuento_max_pct_empleado", "10") or "0")
             if subtotal == 0 or descuento * 100 / subtotal > tope:
                 raise ErrorNegocio(f"Un empleado puede dar hasta {tope}% de descuento. Pida autorización al administrador.")
-        total = subtotal - descuento
+        tipo_entrega, cargo, direccion = _datos_entrega(cur, sesion, entrega)
+        total = subtotal - descuento + cargo
 
         ahora = datetime.now()
         if fecha_promesa is None:
@@ -61,8 +84,10 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
         folio = siguiente_folio(cur, prefijo)
         cur.execute(
             "INSERT INTO ordenes (folio, cliente_id, usuario_id, fecha_recepcion, fecha_promesa, subtotal, "
-            "descuento, total, observaciones) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-            (folio, cliente_id, sesion["id"], ahora, fecha_promesa, subtotal, descuento, total, observaciones),
+            "descuento, total, observaciones, tipo_entrega, cargo_domicilio, direccion_entrega) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            (folio, cliente_id, sesion["id"], ahora, fecha_promesa, subtotal, descuento, total, observaciones,
+             tipo_entrega, cargo, direccion),
         )
         orden_id = cur.lastrowid
         for servicio_id, desc, cant, precio, importe in lineas:
@@ -88,14 +113,16 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
 
 def crear_orden(conn, sesion, items: list[dict], cliente_id: int | None = None,
                 fecha_promesa: datetime | None = None, descuento=0, observaciones: str | None = None,
-                anticipo: dict | None = None) -> int:
+                anticipo: dict | None = None, entrega: dict | None = None) -> int:
     """items: [{'servicio_id', 'cantidad', 'descripcion'(opcional)}].
+    entrega: None = recoge en mostrador; {'tipo': 'domicilio', 'direccion': ..., 'cargo': opcional}.
+    El cargo a domicilio sale de la configuración; solo el administrador puede cambiarlo en la orden.
     anticipo: {'metodo_pago_id', 'monto', 'referencia'(opcional)} (requiere caja abierta).
     Todo ocurre en una sola transacción: si el anticipo falla, no se crea la orden."""
     requerir_rol(sesion, "administrador", "empleado")
     for intento in range(3):
         try:
-            return _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo)
+            return _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo, entrega)
         except mysql.connector.IntegrityError as e:
             # Dos órdenes simultáneas pudieron calcular el mismo folio: se reintenta.
             if e.errno == 1062 and "folio" in str(e).lower() and intento < 2:

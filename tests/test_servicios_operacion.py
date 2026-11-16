@@ -71,6 +71,31 @@ def test_crear_orden_calcula_totales_y_folio(conn, empleado, servicio_kilo, serv
     assert ordenes.obtener_orden(conn, oid2)["folio"] == "OC-000002"
 
 
+def test_servicio_a_domicilio_suma_el_cargo_configurado(conn, admin, empleado, servicio_kilo):
+    anterior = configuracion.obtener(conn, "cargo_domicilio", "0")
+    configuracion.establecer(conn, admin, "cargo_domicilio", "35")
+    try:
+        items = [{"servicio_id": servicio_kilo, "cantidad": 4}]                       # 4 kg x 28.50 = 114
+        mostrador = ordenes.obtener_orden(conn, ordenes.crear_orden(conn, empleado, items))
+        assert mostrador["tipo_entrega"] == "mostrador" and mostrador["cargo_domicilio"] == 0
+        assert mostrador["total"] == D("114.00")
+        with pytest.raises(ErrorNegocio, match="dirección"):
+            ordenes.crear_orden(conn, empleado, items, entrega={"tipo": "domicilio", "direccion": " "})
+        with pytest.raises(ErrorNegocio, match="Solo el administrador"):
+            ordenes.crear_orden(conn, empleado, items, entrega={"tipo": "domicilio", "direccion": "Calle 1", "cargo": 0})
+        oid = ordenes.crear_orden(conn, empleado, items, entrega={"tipo": "domicilio", "direccion": "Av. Juárez 12"})
+        o = ordenes.obtener_orden(conn, oid)
+        assert (o["tipo_entrega"], o["cargo_domicilio"], o["direccion_entrega"]) == ("domicilio", D("35.00"), "Av. Juárez 12")
+        assert o["subtotal"] == D("114.00") and o["total"] == D("149.00") and o["saldo"] == D("149.00")
+        especial = ordenes.crear_orden(conn, admin, items, entrega={"tipo": "domicilio", "direccion": "Cerca", "cargo": 20})
+        assert ordenes.obtener_orden(conn, especial)["total"] == D("134.00")       # el administrador puede ajustarlo
+        from oceanica.servicios import tickets
+        t = tickets.ticket_orden_texto(conn, oid)
+        assert "Servicio a domicilio" in t and "Av. Juárez 12" in t
+    finally:
+        configuracion.establecer(conn, admin, "cargo_domicilio", anterior)
+
+
 def test_piezas_deben_ser_enteras(conn, empleado, servicio_pieza):
     with pytest.raises(ErrorNegocio):
         ordenes.crear_orden(conn, empleado, [{"servicio_id": servicio_pieza, "cantidad": "1.5"}])

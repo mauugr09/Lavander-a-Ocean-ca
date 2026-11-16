@@ -158,6 +158,11 @@ class OrdenesView(QWidget):
         h.append("</table><hr>")
         if Decimal(o["descuento"]) > 0:
             h.append(f"<p>Descuento: -{dinero(o['descuento'])}</p>")
+        if o.get("tipo_entrega") == "domicilio":
+            h.append(f"<p style='font-size:13pt; color:{tema.PRIMARIO}'><b>Servicio a domicilio</b> "
+                     f"(cargo {dinero(o['cargo_domicilio'])})<br>{escape(o['direccion_entrega'] or '')}</p>")
+        else:
+            h.append("<p>Recoge en mostrador</p>")
         h.append(f"<p style='font-size:13pt'><b>Total {dinero(o['total'])}</b> · Pagado {dinero(o['pagado'])}</p>")
         h.append(f"<p style='font-size:15pt; color:{tema.ALERTA}'><b>Por pagar: {dinero(o['saldo'])}</b></p>" if o["saldo"] > 0
                  else f"<p style='font-size:15pt; color:{tema.OK}'><b>Pagado completo</b></p>")
