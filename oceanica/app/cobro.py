@@ -110,9 +110,9 @@ class CobroDialog(QDialog):
         self.b_parte = BotonGrande("receipt", "Deja un anticipo" if self.permite_cero else "Paga solo una parte",
                                    "El resto se cobra después", COLORES[0], alto=96)
         self.b_despues = BotonGrande("clock", "Paga al recoger", "No se cobra nada ahora", COLORES[4], alto=96)
-        self.b_despues.setVisible(self.permite_cero)
         for b in (self.b_todo, self.b_parte, self.b_despues):
             lay.addWidget(b)
+        self.b_despues.setVisible(self.permite_cero)  # después de agregarlo: si no, aparece como ventana suelta
         lay.addStretch(1)
         self.b_todo.clicked.connect(lambda: self.elegir_modo("todo"))
         self.b_parte.clicked.connect(lambda: self.elegir_modo("parte"))

@@ -479,3 +479,34 @@ def test_horarios_y_ajustes_de_asistencia(qapp, conn, admin, empleado, mundo, mo
 def datetime_(dia, hora):
     from datetime import datetime
     return datetime(dia.year, dia.month, dia.day, hora)
+
+
+def test_cambiar_de_seccion_no_abre_ventanitas_sueltas(qapp, conn, admin, mundo):
+    """Ningún botón o etiqueta debe aparecer un instante como ventana propia al cambiar de sección."""
+    from PySide6.QtCore import QEvent, QObject
+    from PySide6.QtWidgets import QDialog
+
+    v = Ventana(Contexto(conn))
+    sueltas = []
+
+    class Vigia(QObject):
+        def eventFilter(self, o, e):
+            if (e.type() == QEvent.Show and o.isWidgetType() and o.isWindow() and o is not v
+                    and not isinstance(o, QDialog) and not o.inherits("QMenu")
+                    and not o.inherits("QAbstractItemView")):  # listas de sugerencias del autocompletado
+                sueltas.append(type(o).__name__)
+            return False
+
+    vigia = Vigia()
+    qapp.installEventFilter(vigia)
+    try:
+        v.show()
+        v.abrir_shell(admin)
+        for i in list(range(len(v.paginas))) + [0, 3, 0]:
+            v.nav.setCurrentRow(i)
+            qapp.processEvents()
+    finally:
+        qapp.removeEventFilter(vigia)
+        v.cerrar_sesion()
+        v.close()
+    assert sueltas == []
