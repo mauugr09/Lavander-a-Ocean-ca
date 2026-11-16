@@ -105,11 +105,15 @@ def test_costo_de_nomina_solo_admin(conn, admin, empleado, negocio):
 def test_exportar_excel_con_totales(conn, negocio, tmp_path):
     rep = reportes.ventas_por_servicio(conn, HOY, HOY)
     ruta = exportacion.exportar(rep, tmp_path / "ventas.xlsx", "Lavandería Oceánica")
-    hoja = load_workbook(ruta).active
+    hoja = load_workbook(ruta, data_only=True).active
     filas = list(hoja.iter_rows(values_only=True))
-    assert filas[0][0] == "Lavandería Oceánica - Ventas por servicio"
-    assert filas[3][0] == "Servicio" and filas[-1][0] == "TOTAL"
-    assert filas[-1][4] == pytest.approx(354.0)
+    textos = [v for f in filas for v in f if isinstance(v, str)]
+    assert "Lavandería Oceánica" in textos and "Ventas por servicio" in textos
+    assert any(t.startswith("Cómo leer este reporte") for t in textos)
+    enc = next(i for i, f in enumerate(filas) if f[0] == "Servicio")       # tabla con encabezados
+    assert filas[-1][0] == "TOTAL" and filas[-1][4] == pytest.approx(354.0)
+    assert hoja.tables and len(hoja._charts) == 1                          # tabla de Excel con filtros y gráfica
+    assert enc < len(filas) - 1
 
 
 def test_exportar_pdf_y_formato_invalido(conn, negocio, tmp_path):
