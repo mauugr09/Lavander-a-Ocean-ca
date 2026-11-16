@@ -68,3 +68,23 @@ def test_datos_de_ejemplo_dejan_una_base_coherente(conn, admin):
     cur.execute("SELECT COUNT(*) AS n FROM v_saldo_ordenes WHERE estado = 'entregada' AND saldo <> 0")
     assert cur.fetchone()["n"] == 0                                       # lo entregado está pagado
     assert panel.resumen(conn)["mes"]["vendido"] >= 0
+
+
+def test_cifras_del_panel_empiezan_ocultas(conn, admin):
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from oceanica.app.aplicacion import preparar_aplicacion
+    from oceanica.app.contexto import Contexto
+    from oceanica.app.v_panel import PanelView
+    preparar_aplicacion()
+    p = PanelView(Contexto(conn))
+    p.al_mostrar()
+    assert all(i.oculto and i.contenido.graphicsEffect() is not None for i in p.indicadores)
+    p.i_hoy.ojo.click()                                  # el ojo muestra solo esa cifra
+    assert not p.i_hoy.oculto and p.i_hoy.contenido.graphicsEffect() is None and p.i_mes.oculto
+    p.b_ver.click()                                      # «Mostrar cifras» muestra todas
+    assert all(not i.oculto for i in p.indicadores) and p.b_ver.text() == "Ocultar cifras"
+    p.cargar()                                           # «Actualizar» no las vuelve a ocultar
+    assert all(not i.oculto for i in p.indicadores)
+    p.al_mostrar()                                       # al volver a entrar, se ocultan otra vez
+    assert all(i.oculto for i in p.indicadores)

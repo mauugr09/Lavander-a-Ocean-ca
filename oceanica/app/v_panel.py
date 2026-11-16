@@ -4,9 +4,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
-                               QStackedLayout, QVBoxLayout, QWidget)
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtWidgets import (QComboBox, QFrame, QGraphicsBlurEffect, QGridLayout, QHBoxLayout, QLabel, QPushButton,
+                               QScrollArea, QStackedLayout, QToolButton, QVBoxLayout, QWidget)
 
 from ..servicios import panel, reportes
 from . import tema
@@ -73,26 +73,59 @@ class Grafica(QFrame):
 
 
 class Indicador(QFrame):
-    """Cifra grande con su comparación contra el periodo anterior."""
+    """Cifra grande con su comparación contra el periodo anterior. El ojo la muestra u oculta (borrosa)."""
 
-    def __init__(self, titulo: str, comparacion: str):
+    def __init__(self, titulo: str, comparacion: str, al_cambiar=None):
         super().__init__()
         self.setProperty("rol", "tarjeta")
-        self.comparacion = comparacion
+        self.comparacion, self.al_cambiar = comparacion, al_cambiar
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(16, 12, 16, 12)
+        lay.setContentsMargins(16, 10, 10, 12)
         lay.setSpacing(4)
-        lay.addWidget(etiqueta(titulo, "suave"))
+        cab = QHBoxLayout()
+        cab.addWidget(etiqueta(titulo, "suave"), 1)
+        self.ojo = QToolButton(self)
+        self.ojo.setAutoRaise(True)
+        self.ojo.setCursor(Qt.PointingHandCursor)
+        self.ojo.setIconSize(QSize(22, 22))
+        self.ojo.setFixedSize(36, 32)
+        self.ojo.setStyleSheet("QToolButton { border: none; border-radius: 6px; } "
+                               "QToolButton:hover { background: #E6F0FF; }")
+        self.ojo.clicked.connect(lambda: self.ocultar(not self.oculto, avisar=True))
+        cab.addWidget(self.ojo, 0, Qt.AlignTop)
+        lay.addLayout(cab)
+        self.contenido = QWidget(self)
+        cl = QVBoxLayout(self.contenido)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(4)
         self.valor = etiqueta("—", "titulo")
-        lay.addWidget(self.valor)
+        cl.addWidget(self.valor)
         fila = QHBoxLayout()
         fila.setSpacing(6)
-        self.ico = QLabel(self)
+        self.ico = QLabel(self.contenido)
         self.texto = etiqueta("")
         self.texto.setWordWrap(True)
         fila.addWidget(self.ico)
         fila.addWidget(self.texto, 1)
-        lay.addLayout(fila)
+        cl.addLayout(fila)
+        lay.addWidget(self.contenido)
+        self.oculto = False
+        self.ocultar(True)
+
+    def ocultar(self, oculto: bool, avisar: bool = False):
+        """Oculto = cifras borrosas, para que no las lea quien está frente al mostrador."""
+        self.oculto = oculto
+        if oculto:
+            efecto = QGraphicsBlurEffect(self.contenido)
+            efecto.setBlurRadius(32)
+            self.contenido.setGraphicsEffect(efecto)
+        else:
+            self.contenido.setGraphicsEffect(None)
+        poner(self.ojo, "eye" if oculto else "eye-off", tema.TEXTO_SUAVE, 22)
+        self.ojo.setText("")
+        self.ojo.setToolTip("Mostrar la cifra" if oculto else "Ocultar la cifra")
+        if avisar and self.al_cambiar:
+            self.al_cambiar()
 
     def poner(self, valor: str, variacion: Decimal | None = None, detalle: str = ""):
         self.valor.setText(valor)
@@ -139,17 +172,21 @@ class PanelView(QWidget):
         textos.addWidget(etiqueta("Cómo van las ventas. Las cifras son el total de las órdenes recibidas "
                                   "(sin canceladas).", "suave", True))
         cab.addLayout(textos, 1)
+        self.b_ver = poner(QPushButton("Mostrar cifras"), "eye")
+        self.b_ver.clicked.connect(self._alternar_todo)
+        cab.addWidget(self.b_ver, 0, Qt.AlignTop)
         self.b_actualizar = poner(QPushButton("Actualizar"), "rotate-clockwise")
-        self.b_actualizar.clicked.connect(self.al_mostrar)
+        self.b_actualizar.clicked.connect(self.cargar)
         cab.addWidget(self.b_actualizar, 0, Qt.AlignTop)
         lay.addLayout(cab)
 
         fila_ind = QHBoxLayout()
         fila_ind.setSpacing(12)
-        self.i_hoy = Indicador("Vendido hoy", "vs ayer")
-        self.i_semana = Indicador("Esta semana", "vs semana anterior")
-        self.i_mes = Indicador("Este mes", "vs mismos días del mes anterior")
-        self.i_cobrar = Indicador("Por cobrar", "")
+        self.i_hoy = Indicador("Vendido hoy", "vs ayer", self._estado_ojos)
+        self.i_semana = Indicador("Esta semana", "vs semana anterior", self._estado_ojos)
+        self.i_mes = Indicador("Este mes", "vs mismos días del mes anterior", self._estado_ojos)
+        self.i_cobrar = Indicador("Por cobrar", "", self._estado_ojos)
+        self.indicadores = [self.i_hoy, self.i_semana, self.i_mes, self.i_cobrar]
         for w in (self.i_hoy, self.i_semana, self.i_mes, self.i_cobrar):
             fila_ind.addWidget(w, 1)
         lay.addLayout(fila_ind)
@@ -206,7 +243,28 @@ class PanelView(QWidget):
         lay.addStretch(1)
 
     # ------------------------------------------------------------------ datos
+    def _estado_ojos(self):
+        todos_visibles = all(not i.oculto for i in self.indicadores)
+        self.b_ver.setText("Ocultar cifras" if todos_visibles else "Mostrar cifras")
+        poner(self.b_ver, "eye-off" if todos_visibles else "eye")
+
+    def _alternar_todo(self):
+        ocultar = all(not i.oculto for i in self.indicadores)
+        for i in self.indicadores:
+            i.ocultar(ocultar)
+        self._estado_ojos()
+
+    def ocultar_cifras(self):
+        """Cada vez que se entra al panel, las cifras empiezan ocultas."""
+        for i in self.indicadores:
+            i.ocultar(True)
+        self._estado_ojos()
+
     def al_mostrar(self):
+        self.ocultar_cifras()
+        self.cargar()
+
+    def cargar(self):
         hoy = date.today()
         ok, r = seguro(self, panel.resumen, self.ctx.conn, hoy)
         if ok:
