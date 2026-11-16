@@ -12,6 +12,12 @@ import mysql.connector
 
 from .config import CARPETA_MIGRACIONES, ConfigDB, cargar_config
 
+try:
+    import _mysql_connector  # noqa: F401  (extensión de C del conector)
+    _HAY_EXTENSION_C = True
+except ImportError:
+    _HAY_EXTENSION_C = False
+
 
 def conectar(cfg: ConfigDB | None = None):
     cfg = cfg or cargar_config()
@@ -28,7 +34,8 @@ def conectar(cfg: ConfigDB | None = None):
         time_zone="SYSTEM",
         # En el ejecutable empaquetado se usa la implementación en Python del conector: la de C necesita
         # los plugins de autenticación del sistema (mysql_native_password.so/.dll), que no se incluyen.
-        use_pure=bool(getattr(sys, "frozen", False)),
+        # También se usa si la extensión de C no está instalada (por ejemplo, Python para Windows ARM64).
+        use_pure=bool(getattr(sys, "frozen", False)) or not _HAY_EXTENSION_C,
     )
     return conn
 
