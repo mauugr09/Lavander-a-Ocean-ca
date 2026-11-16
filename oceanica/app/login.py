@@ -4,9 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QStyle,
+                               QStyleOption, QVBoxLayout, QWidget)
 
+from .burbujas import Burbujas
 from .iconos import poner
 from ..seguridad import ErrorAcceso, iniciar_sesion
 from ..servicios import usuarios
@@ -28,6 +30,7 @@ class LoginView(QWidget):
         super().__init__()
         self.setObjectName("fondo")
         self.ctx = ctx
+        self.burbujas = Burbujas(self)
         raiz = QHBoxLayout(self)
         raiz.addStretch(1)
         col = QVBoxLayout()
@@ -75,6 +78,23 @@ class LoginView(QWidget):
         self.b_admin.clicked.connect(self._admin)
         self.usuario.returnPressed.connect(self.password.setFocus)
         self.password.returnPressed.connect(self._admin)
+
+    # ---- burbujas del fondo
+    def paintEvent(self, e):
+        p = QPainter(self)
+        op = QStyleOption()
+        op.initFrom(self)
+        self.style().drawPrimitive(QStyle.PE_Widget, op, p, self)  # fondo de la hoja de estilos
+        self.burbujas.pintar(p)
+        p.end()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self.burbujas.iniciar()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self.burbujas.detener()
 
     def al_mostrar(self):
         self.lb_nombre.setText(self.ctx.nombre_negocio or "Oceánica")
