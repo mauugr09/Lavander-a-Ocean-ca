@@ -68,7 +68,7 @@ class MostradorView(QWidget):
         izq.addWidget(etiqueta("Cliente", "subtitulo"))
         fila_cli = QHBoxLayout()
         self.cliente = QLineEdit()
-        self.cliente.setPlaceholderText("Nombre o teléfono — déjalo vacío si no se registra")
+        self.cliente.setPlaceholderText("Nombre o teléfono (puede dejarlo vacío)")
         self.cliente.setMinimumHeight(40)
         self.modelo_cli = QStringListModel()
         self.completer = QCompleter(self.modelo_cli, self)
@@ -79,7 +79,8 @@ class MostradorView(QWidget):
         self.b_nuevo_cli.setMinimumHeight(40)
         self.b_quitar_cli = QPushButton("✕")
         self.b_quitar_cli.setToolTip("Quitar cliente")
-        self.b_quitar_cli.setFixedSize(40, 40)
+        self.b_quitar_cli.setFixedSize(46, 46)
+        self.b_quitar_cli.setStyleSheet("padding: 0; min-height: 0;")
         fila_cli.addWidget(self.cliente, 1)
         fila_cli.addWidget(self.b_nuevo_cli)
         fila_cli.addWidget(self.b_quitar_cli)
@@ -439,7 +440,7 @@ class MostradorView(QWidget):
     # --------------------------------------------------------------- guardar
     def limpiar(self, preguntar: bool = False):
         if preguntar and self.carrito:
-            r = QMessageBox.question(self, "Empezar de nuevo", "¿Borrar todo lo que llevas en esta orden?")
+            r = QMessageBox.question(self, "Empezar de nuevo", "¿Borrar todo lo que lleva esta orden?")
             if r != QMessageBox.Yes:
                 return
         self.carrito.limpiar()
@@ -453,11 +454,11 @@ class MostradorView(QWidget):
 
     def guardar(self):
         if not self.carrito:
-            QMessageBox.information(self, "Oceánica", "Agrega al menos un servicio a la orden.")
+            QMessageBox.information(self, "Oceánica", "Agregue al menos un servicio a la orden.")
             return
         if self.cliente.text().strip() and self.cliente_id is None:
             r = QMessageBox.question(self, "Cliente sin seleccionar",
-                                     "Escribiste un cliente pero no lo elegiste de la lista.\n"
+                                     "Escribió un cliente pero no lo eligió de la lista.\n"
                                      "¿Guardar la orden sin cliente?")
             if r != QMessageBox.Yes:
                 self.cliente.setFocus()
@@ -469,9 +470,9 @@ class MostradorView(QWidget):
         pago = dlg.pago
         if pago and not caja.corte_abierto(self.ctx.conn):
             QMessageBox.warning(self, "Caja cerrada", "No hay caja abierta, así que no se puede cobrar.\n"
-                                "Abre la caja en la sección «Caja» o guarda la orden sin anticipo.")
+                                "Abra la caja en la sección «Caja» o guarde la orden con «Paga al recoger».")
             return
-        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirma con tu PIN para guardar la orden")
+        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirme con su PIN para guardar la orden")
         if not sesion:
             return
         promesa = self.entrega.dateTime().toPython()

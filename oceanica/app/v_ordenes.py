@@ -16,8 +16,8 @@ from .dialogos import CobroDialog, TicketDialog
 from .util import (ESTADOS, cantidad_txt, crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, poblar, seguro,
                    tarjeta)
 
-SIGUIENTE = {"recibida": ("en_proceso", "Marcar en proceso"), "en_proceso": ("lista", "Marcar lista")}
-FILTROS = [("Abiertas", None), ("Todas", "todas"), ("Recibidas", "recibida"), ("En proceso", "en_proceso"),
+SIGUIENTE = {"recibida": ("en_proceso", "▶  Pasar a «En proceso»"), "en_proceso": ("lista", "✔  Marcar como «Lista»")}
+FILTROS = [("Pendientes de entregar", None), ("Todas", "todas"), ("Recibidas", "recibida"), ("En proceso", "en_proceso"),
            ("Listas", "lista"), ("Entregadas", "entregada"), ("Canceladas", "cancelada")]
 
 
@@ -36,14 +36,14 @@ class OrdenesView(QWidget):
         izq = QVBoxLayout()
         fila = QHBoxLayout()
         self.buscar = QLineEdit()
-        self.buscar.setPlaceholderText("Folio, cliente o teléfono  (F3)")
+        self.buscar.setPlaceholderText("🔍  Buscar por folio, nombre o teléfono")
         self.filtro = QComboBox()
         for texto, valor in FILTROS:
             self.filtro.addItem(texto, valor)
         fila.addWidget(self.buscar, 1)
         fila.addWidget(self.filtro)
         izq.addLayout(fila)
-        self.tabla = crear_tabla(["Folio", "Cliente", "Estado", "Entrega", "Total", "Saldo"], derecha=(4, 5), estirar=1)
+        self.tabla = crear_tabla(["Folio", "Cliente", "Estado", "Entrega", "Total", "Por pagar"], derecha=(4, 5), estirar=1)
         izq.addWidget(self.tabla, 1)
         self.lb_cuenta = etiqueta("", "suave")
         izq.addWidget(self.lb_cuenta)
@@ -56,21 +56,26 @@ class OrdenesView(QWidget):
         self.detalle.setFrameShape(QTextBrowser.NoFrame)
         dl.addWidget(self.detalle, 1)
         f1 = QHBoxLayout()
-        self.b_avanzar = QPushButton("Marcar en proceso")
-        self.b_cobrar = QPushButton("Cobrar saldo (F6)")
+        self.b_avanzar = QPushButton("▶  Pasar a «En proceso»")
+        self.b_cobrar = QPushButton("💲  Cobrar lo pendiente")
         f1.addWidget(self.b_avanzar)
         f1.addWidget(self.b_cobrar)
         dl.addLayout(f1)
         f2 = QHBoxLayout()
-        self.b_entregar = QPushButton("Entregar (F7)")
+        self.b_entregar = QPushButton("📦  Entregar al cliente")
         self.b_entregar.setProperty("rol", "primario")
-        self.b_ticket = QPushButton("Ticket")
+        self.b_ticket = QPushButton("🖨  Ticket")
         self.b_cancelar = QPushButton("Cancelar orden")
         self.b_cancelar.setProperty("rol", "peligro")
         f2.addWidget(self.b_entregar, 1)
         f2.addWidget(self.b_ticket)
         f2.addWidget(self.b_cancelar)
         dl.addLayout(f2)
+        for b in (self.b_avanzar, self.b_cobrar, self.b_entregar, self.b_ticket, self.b_cancelar):
+            b.setMinimumHeight(52)
+        self.b_entregar.setStyleSheet("font-size: 13pt;")
+        self.buscar.setMinimumHeight(44)
+        self.filtro.setMinimumHeight(44)
         raiz.addWidget(der, 4)
 
         self.buscar.textChanged.connect(self.recargar)
@@ -117,7 +122,7 @@ class OrdenesView(QWidget):
         poblar(self.tabla, [(f["id"], [f["folio"], f["cliente"] or "Mostrador", ESTADOS[f["estado"]],
                                        fecha_hora(f["fecha_promesa"]), dinero(f["total"]),
                                        dinero(f["saldo"]) if f["saldo"] > 0 else "—"]) for f in filas], color)
-        self.lb_cuenta.setText(f"{len(filas)} orden(es)" + ("  ·  rojo = entrega vencida, naranja = lista con saldo" if filas else ""))
+        self.lb_cuenta.setText(f"{len(filas)} orden(es)" + ("  ·  Rojo: entrega atrasada  ·  Naranja: lista, falta pagar" if filas else ""))
         if filas and self.tabla.currentRow() < 0:
             self.tabla.selectRow(0)
         self._mostrar_detalle()
@@ -132,7 +137,7 @@ class OrdenesView(QWidget):
         oid = id_seleccionado(self.tabla)
         self.orden = None
         if oid is None:
-            self.detalle.setHtml("<p style='color:#5B6F86'>Selecciona una orden para ver su detalle.</p>")
+            self.detalle.setHtml("<p style='color:#5B6F86'>Seleccione una orden de la lista para ver su detalle.</p>")
             return self._botones()
         ok, o = seguro(self, ordenes.obtener_orden, self.ctx.conn, oid)
         if not ok:
@@ -150,8 +155,9 @@ class OrdenesView(QWidget):
         h.append("</table><hr>")
         if Decimal(o["descuento"]) > 0:
             h.append(f"<p>Descuento: -{dinero(o['descuento'])}</p>")
-        h.append(f"<p><b>Total {dinero(o['total'])}</b> · Pagado {dinero(o['pagado'])} · "
-                 f"<b style='color:{tema.ALERTA if o['saldo'] > 0 else tema.OK}'>Saldo {dinero(o['saldo'])}</b></p>")
+        h.append(f"<p style='font-size:13pt'><b>Total {dinero(o['total'])}</b> · Pagado {dinero(o['pagado'])}</p>")
+        h.append(f"<p style='font-size:15pt; color:{tema.ALERTA}'><b>Por pagar: {dinero(o['saldo'])}</b></p>" if o["saldo"] > 0
+                 else f"<p style='font-size:15pt; color:{tema.OK}'><b>✔ Pagado completo</b></p>")
         if o["por_confirmar"] > 0:
             h.append(f"<p style='color:{tema.ALERTA}'>⚠ {dinero(o['por_confirmar'])} en transferencia por confirmar</p>")
         for p in o["pagos"]:
@@ -193,10 +199,10 @@ class OrdenesView(QWidget):
         o = self.orden
         if not o or o["saldo"] <= 0 or o["estado"] == "cancelada":
             return False
-        dlg = CobroDialog(self.ctx, self, o["saldo"], f"Cobrar saldo de {o['folio']}", permite_cero=False, texto_importe="Saldo")
+        dlg = CobroDialog(self.ctx, self, o["saldo"], f"Cobro pendiente de la orden {o['folio']}", permite_cero=False, texto_importe="Por pagar")
         if not dlg.exec() or not dlg.pago:
             return False
-        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirma con tu PIN para cobrar")
+        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirme con su PIN para cobrar")
         if not sesion:
             return False
         p = dlg.pago
@@ -245,7 +251,7 @@ class OrdenesView(QWidget):
                     nota, okp = QInputDialog.getText(self, "Entrega sin cobrar", "Motivo (obligatorio):")
                     if not okp or not nota.strip():
                         return
-                    entrega = self.ctx.identificar(self, sensible=True, titulo="¿Quién entrega? Confirma con tu PIN")
+                    entrega = self.ctx.identificar(self, sensible=True, titulo="¿Quién entrega? Confirme con su PIN")
                     if not entrega:
                         return
                     nota = f"Autorizó {encargada['usuario']}, entregó {entrega['usuario']}: {nota.strip()}"
@@ -267,7 +273,7 @@ class OrdenesView(QWidget):
             encargada = self.ctx.autorizar_admin(self, f"Autoriza entregar {o['folio']} con transferencia por confirmar")
             if not encargada:
                 return
-            entrega = self.ctx.identificar(self, sensible=True, titulo="¿Quién entrega? Confirma con tu PIN")
+            entrega = self.ctx.identificar(self, sensible=True, titulo="¿Quién entrega? Confirme con su PIN")
             if not entrega:
                 return
             ok, _ = seguro(self, ordenes.cambiar_estado, self.ctx.conn, encargada, o["id"], "entregada",
@@ -275,7 +281,7 @@ class OrdenesView(QWidget):
             if ok:
                 self._tras_cambio()
             return
-        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirma con tu PIN para entregar")
+        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirme con su PIN para entregar")
         if not sesion:
             return
         ok, _ = seguro(self, ordenes.cambiar_estado, self.ctx.conn, sesion, o["id"], "entregada", nota, forzar)
@@ -300,7 +306,7 @@ class OrdenesView(QWidget):
             if not dlg.exec() or not dlg.pago:
                 return
             reembolso = dlg.pago
-        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirma con tu PIN para cancelar")
+        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirme con su PIN para cancelar")
         if not sesion:
             return
         if reembolso:

@@ -59,11 +59,12 @@ class BotonGrande(QPushButton):
         texto, suave = (("white", "#DCEBFF") if destacado else (TEXTO, TEXTO_SUAVE))
         if destacado:
             estilo = (f"QPushButton {{ background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {PRIMARIO}, "
-                      f"stop:1 {SECUNDARIO}); border: none; border-radius: 14px; }}"
+                      f"stop:1 {SECUNDARIO}); border: none; border-radius: 14px; min-height: {alto}px; padding: 0; }}"
                       f"QPushButton:hover {{ background: {PRIMARIO_OSCURO}; }}"
                       f"QPushButton:focus {{ border: 3px solid #FFD54A; }}")
         else:
-            estilo = (f"QPushButton {{ background: {fondo}; border: 2px solid {borde}; border-radius: 14px; }}"
+            estilo = (f"QPushButton {{ background: {fondo}; border: 2px solid {borde}; border-radius: 14px; "
+                      f"min-height: {alto}px; padding: 0; }}"
                       f"QPushButton:hover {{ border: 2px solid {PRIMARIO}; }}"
                       f"QPushButton:pressed {{ background: white; }}"
                       f"QPushButton:focus {{ border: 3px solid {PRIMARIO}; }}")
@@ -107,7 +108,8 @@ class BotonGrande(QPushButton):
 class Teclado(QWidget):
     """Pantalla grande con teclado numérico táctil (también acepta el teclado de la computadora)."""
 
-    def __init__(self, inicial: str = "", prefijo: str = "", sufijo: str = "", alto_tecla: int = 60):
+    def __init__(self, inicial: str = "", prefijo: str = "", sufijo: str = "", alto_tecla: int = 60,
+                 con_punto: bool = True):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -129,11 +131,11 @@ class Teclado(QWidget):
         lay.addLayout(fila)
         rejilla = QGridLayout()
         rejilla.setSpacing(8)
-        for i, t in enumerate(["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"]):
+        for i, t in enumerate(["7", "8", "9", "4", "5", "6", "1", "2", "3", "." if con_punto else "C", "0", "⌫"]):
             b = QPushButton(t)
             b.setMinimumSize(80, alto_tecla)
             b.setFocusPolicy(Qt.NoFocus)
-            b.setAccessibleName("Borrar" if t == "⌫" else t)
+            b.setAccessibleName({"⌫": "Borrar", "C": "Borrar todo"}.get(t, t))
             b.setStyleSheet("font-size: 20pt; font-weight: 600; border-radius: 10px;")
             b.clicked.connect(lambda _=False, t=t: self.tecla(t))
             rejilla.addWidget(b, i // 3, i % 3)
@@ -143,6 +145,8 @@ class Teclado(QWidget):
         s = self.pantalla.text()
         if t == "⌫":
             s = s[:-1]
+        elif t == "C":
+            s = ""
         elif t == ".":
             s = s if "." in s else (s or "0") + "."
         elif len(s.replace(",", "")) < 8:
@@ -166,7 +170,7 @@ class KilosDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.setSpacing(10)
         lay.addWidget(etiqueta(f"🧺  {servicio['nombre']}", "subtitulo"))
-        lay.addWidget(etiqueta(f"{dinero(self.precio)} por kilo · Pesa la ropa y escribe los kilos", "suave", True))
+        lay.addWidget(etiqueta(f"{dinero(self.precio)} por kilo · Pese la ropa y escriba los kilos", "suave", True))
 
         self.teclado = Teclado("" if actual is None else format(actual.normalize(), "f"), sufijo="kg")
         self.pantalla = self.teclado.pantalla
@@ -204,7 +208,7 @@ class KilosDialog(QDialog):
     def _aceptar(self):
         k = a_decimal(self.pantalla.text())
         if k is None or k <= 0:
-            self.msg.setText("Escribe los kilos (mayor que cero).")
+            self.msg.setText("Escriba los kilos (mayor que cero).")
             return
         self.kilos = k
         self.accept()

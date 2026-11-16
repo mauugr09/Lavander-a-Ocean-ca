@@ -17,7 +17,7 @@ _ORDEN_FLUJO = {"recibida": 0, "en_proceso": 1, "lista": 2, "entregada": 3}
 
 def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo) -> int:
     if not items:
-        raise ErrorNegocio("Agrega al menos un servicio a la orden.")
+        raise ErrorNegocio("Agregue al menos un servicio a la orden.")
     observaciones = texto(observaciones, "observaciones", 300, False)
     descuento = dinero(descuento, "descuento")
     if descuento < 0:
@@ -48,7 +48,7 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
         if descuento > 0 and not es_admin(sesion):
             tope = Decimal(config_valor(cur, "descuento_max_pct_empleado", "10") or "0")
             if subtotal == 0 or descuento * 100 / subtotal > tope:
-                raise ErrorNegocio(f"Un empleado puede dar hasta {tope}% de descuento. Pide autorización al administrador.")
+                raise ErrorNegocio(f"Un empleado puede dar hasta {tope}% de descuento. Pida autorización al administrador.")
         total = subtotal - descuento
 
         ahora = datetime.now()
@@ -101,7 +101,7 @@ def crear_orden(conn, sesion, items: list[dict], cliente_id: int | None = None,
             if e.errno == 1062 and "folio" in str(e).lower() and intento < 2:
                 continue
             raise
-    raise ErrorNegocio("No se pudo generar el folio de la orden. Intenta de nuevo.")
+    raise ErrorNegocio("No se pudo generar el folio de la orden. Intente de nuevo.")
 
 
 def cambiar_estado(conn, sesion, orden_id: int, nuevo_estado: str, nota: str | None = None,
@@ -170,7 +170,7 @@ def cancelar_orden(conn, sesion, orden_id: int, motivo: str) -> None:
             raise ErrorNegocio("Solo el administrador puede cancelar una orden que ya está en proceso.")
         pagado = pagado_neto_cur(cur, orden_id)
         if pagado != 0:
-            raise ErrorNegocio(f"La orden tiene ${pagado} cobrados. Registra primero el reembolso.")
+            raise ErrorNegocio(f"La orden tiene ${pagado} cobrados. Registre primero el reembolso.")
         cur.execute("UPDATE ordenes SET estado = 'cancelada' WHERE id = %s", (orden_id,))
         cur.execute(
             "INSERT INTO orden_historial_estado (orden_id, estado_anterior, estado_nuevo, usuario_id, nota) "

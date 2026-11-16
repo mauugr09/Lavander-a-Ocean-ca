@@ -48,7 +48,7 @@ def main() -> int:
     except (mysql.connector.Error, FileNotFoundError) as e:
         QMessageBox.critical(None, "Oceánica Gestión",
                              "No se pudo conectar con la base de datos.\n\n"
-                             "• Revisa que el servicio de MariaDB/MySQL esté encendido.\n"
+                             "• Revise que el servicio de MariaDB/MySQL esté encendido.\n"
                              "• Si es la primera vez: python -m oceanica.init_db (con root)\n  o, si la base ya existe: python -m oceanica.configurar\n\n"
                              f"Detalle: {e}")
         return 1

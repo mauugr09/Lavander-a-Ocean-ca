@@ -77,7 +77,7 @@ def _autenticar(conn, filtro: str, valor, secreto: str, columna_hash: str, mensa
             raise ErrorAcceso("Los administradores inician sesión con su contraseña.")
         if esta_bloqueado(fila["bloqueado_hasta"], ahora):
             conn.rollback()
-            raise ErrorAcceso("Cuenta bloqueada temporalmente. Intenta más tarde.")
+            raise ErrorAcceso("Cuenta bloqueada temporalmente. Intente más tarde.")
 
         if not verificar(secreto, fila[columna_hash]):
             intentos = fila["intentos_fallidos"] + 1
@@ -161,4 +161,4 @@ def crear_usuario(conn, usuario: str, password: str, rol: str, empleado_id: int 
 def requiere_rol(sesion: dict, *roles: str) -> None:
     """Lanza ErrorAcceso si la sesión no tiene alguno de los roles dados."""
     if sesion.get("rol") not in roles:
-        raise ErrorAcceso("No tienes permiso para esta acción.")
+        raise ErrorAcceso("No tiene permiso para esta acción.")

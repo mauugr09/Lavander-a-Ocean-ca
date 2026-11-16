@@ -100,7 +100,7 @@ def cambiar_estado(conn, sesion, usuario_id: int, activo: bool) -> None:
             raise ErrorNegocio("Usuario no encontrado.")
         if not activo:
             if usuario_id == sesion["id"]:
-                raise ErrorNegocio("No puedes desactivar tu propio usuario.")
+                raise ErrorNegocio("No puede desactivar su propio usuario.")
             if u["rol"] == "administrador" and u["activo"] and _admins_activos(cur) <= 1:
                 raise ErrorNegocio("Debe quedar al menos un administrador activo.")
         cur.execute("UPDATE usuarios SET activo = %s WHERE id = %s", (int(activo), usuario_id))

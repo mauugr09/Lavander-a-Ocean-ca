@@ -27,7 +27,7 @@ class Carrito:
 
     def agregar(self, servicio: dict, cantidad: Decimal | None) -> None:
         if cantidad is None or cantidad <= 0:
-            raise ValueError("Escribe una cantidad mayor que cero.")
+            raise ValueError("Escriba una cantidad mayor que cero.")
         if servicio["unidad"] == "pieza" and cantidad != cantidad.to_integral_value():
             raise ValueError(f"'{servicio['nombre']}' se cobra por pieza: la cantidad debe ser un número entero.")
         cantidad = cantidad.quantize(CENTAVO)
@@ -51,7 +51,7 @@ class Carrito:
         if not 0 <= indice < len(self.lineas):
             return
         if cantidad is None or cantidad <= 0:
-            raise ValueError("Escribe una cantidad mayor que cero.")
+            raise ValueError("Escriba una cantidad mayor que cero.")
         l = self.lineas[indice]
         if l.unidad == "pieza" and cantidad != cantidad.to_integral_value():
             raise ValueError(f"'{l.nombre}' se cobra por pieza: la cantidad debe ser un número entero.")

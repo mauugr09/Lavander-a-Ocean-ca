@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRegularExpression, QUrl
 from PySide6.QtGui import QDesktopServices, QFont, QRegularExpressionValidator
-from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLineEdit,
+from PySide6.QtWidgets import (QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLineEdit,
                                QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout)
 
 from ..config import RAIZ
 from ..seguridad import ErrorAcceso, autenticar_pin
 from ..servicios import tickets, usuarios
+from .botones import Teclado
 from .cobro import CobroDialog  # noqa: F401  (se usa desde las pantallas como dialogos.CobroDialog)
+from .tema import PRIMARIO
 from .util import etiqueta, seguro
 
 
@@ -25,50 +27,95 @@ def _botones(dlg: QDialog, texto_ok: str = "Aceptar", primario: bool = True) -> 
 
 
 class PinDialog(QDialog):
-    """Elige al empleado y valida su PIN. Deja la sesión en self.sesion."""
+    """Elige al empleado (botón con su nombre) y valida su PIN con teclado grande. Sesión en self.sesion."""
 
     def __init__(self, ctx, parent, titulo: str = "¿Quién realiza esto?"):
         super().__init__(parent)
         self.ctx, self.sesion = ctx, None
         self.setWindowTitle("Identificación")
         self.setModal(True)
-        self.setMinimumWidth(380)
+        self.setMinimumWidth(620)
         lay = QVBoxLayout(self)
-        lay.setSpacing(10)
-        lay.addWidget(etiqueta(titulo, "subtitulo"))
+        lay.setContentsMargins(22, 18, 22, 18)
+        lay.setSpacing(12)
+        lay.addWidget(etiqueta(titulo, "titulo"))
         ok, filas = seguro(parent, usuarios.listar_para_pin, ctx.conn)
         filas = filas or []
-        self.combo = QComboBox()
-        for f in filas:
-            self.combo.addItem(("●  " if f["presente"] else "     ") + f["nombre"], f["usuario_id"])
-        if ctx.ultimo_usuario_id is not None:
-            i = self.combo.findData(ctx.ultimo_usuario_id)
-            if i >= 0:
-                self.combo.setCurrentIndex(i)
-        self.pin = QLineEdit()
-        self.pin.setEchoMode(QLineEdit.Password)
-        self.pin.setMaxLength(6)
-        self.pin.setPlaceholderText("PIN")
-        self.pin.setValidator(QRegularExpressionValidator(QRegularExpression(r"\d{0,6}")))
-        self.pin.returnPressed.connect(self._aceptar)
+        self.combo = QComboBox()  # guarda la elección; en pantalla se elige con los botones
+        self.combo.setVisible(False)
+        self.botones: list[QPushButton] = []
+        self.grupo = QButtonGroup(self)
+        self.grupo.setExclusive(True)
         self.msg = etiqueta("", "error", True)
+        self.msg.setStyleSheet("font-size: 13pt;")
+        cuerpo = QHBoxLayout()
+        cuerpo.setSpacing(18)
         if not filas:
             lay.addWidget(etiqueta("Todavía no hay empleados con PIN. El administrador debe darlos de alta "
                                    "en «Empleados y usuarios».", palabra=True))
+            self.pin = QLineEdit()
         else:
-            lay.addWidget(etiqueta("Empleado  (● = ya registró su llegada hoy)", "suave"))
-            lay.addWidget(self.combo)
-            lay.addWidget(etiqueta("PIN", "suave"))
-            lay.addWidget(self.pin)
+            izq = QVBoxLayout()
+            izq.addWidget(etiqueta("1. Toque su nombre", "subtitulo"))
+            for i, f in enumerate(filas):
+                self.combo.addItem(f["nombre"], f["usuario_id"])
+                b = QPushButton(f["nombre"] + ("\n✔ Ya registró su llegada" if f["presente"] else ""))
+                b.setCheckable(True)
+                b.setMinimumHeight(64)
+                b.setStyleSheet(f"QPushButton {{ font-size: 13pt; font-weight: 600; text-align: left; padding: 8px 16px; }}"
+                                f"QPushButton:checked {{ background: {PRIMARIO}; color: white; border: none; }}")
+                b.clicked.connect(lambda _=False, i=i: self._elegir(i))
+                self.grupo.addButton(b)
+                self.botones.append(b)
+                izq.addWidget(b)
+            izq.addStretch(1)
+            cuerpo.addLayout(izq, 1)
+            der = QVBoxLayout()
+            der.addWidget(etiqueta("2. Escriba su PIN", "subtitulo"))
+            self.teclado = Teclado(con_punto=False, alto_tecla=56)
+            self.pin = self.teclado.pantalla
+            self.pin.setEchoMode(QLineEdit.Password)
+            self.pin.setPlaceholderText("")
+            der.addWidget(self.teclado)
+            cuerpo.addLayout(der, 1)
+            lay.addLayout(cuerpo)
             lay.addWidget(self.msg)
-        bb = _botones(self, "Continuar")
-        bb.accepted.connect(self._aceptar)
-        bb.button(QDialogButtonBox.Ok).setEnabled(bool(filas))
-        lay.addWidget(bb)
-        (self.pin if ctx.ultimo_usuario_id is not None and filas else self.combo).setFocus()
+        self.pin.setMaxLength(6)
+        self.pin.setValidator(QRegularExpressionValidator(QRegularExpression(r"\d{0,6}")))
+        self.pin.returnPressed.connect(self._aceptar)
+        pie = QHBoxLayout()
+        cancelar = QPushButton("Cancelar")
+        cancelar.setMinimumHeight(52)
+        self.b_ok = QPushButton("✔  Continuar")
+        self.b_ok.setProperty("rol", "primario")
+        self.b_ok.setMinimumHeight(52)
+        self.b_ok.setStyleSheet("font-size: 14pt;")
+        self.b_ok.setEnabled(bool(filas))
+        pie.addWidget(cancelar, 1)
+        pie.addWidget(self.b_ok, 2)
+        lay.addLayout(pie)
+        cancelar.clicked.connect(self.reject)
+        self.b_ok.clicked.connect(self._aceptar)
+        if filas:
+            i = self.combo.findData(ctx.ultimo_usuario_id) if ctx.ultimo_usuario_id is not None else -1
+            if i < 0 and len(filas) == 1:
+                i = 0
+            if i >= 0:
+                self._elegir(i)
+            self.pin.setFocus()
+
+    def _elegir(self, i: int):
+        self.combo.setCurrentIndex(i)
+        self.botones[i].setChecked(True)
+        self.msg.setText("")
+        self.pin.setFocus()
 
     def _aceptar(self):
-        if self.combo.currentData() is None:
+        if not self.botones or not any(b.isChecked() for b in self.botones):
+            self.msg.setText("Primero toque su nombre.")
+            return
+        if not self.pin.text():
+            self.msg.setText("Escriba su PIN.")
             return
         try:
             self.sesion = autenticar_pin(self.ctx.conn, self.combo.currentData(), self.pin.text())

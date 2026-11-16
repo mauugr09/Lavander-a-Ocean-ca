@@ -25,6 +25,18 @@ from .v_transferencias import TransferenciasView
 INACTIVIDAD_ADMIN_MS = 10 * 60 * 1000  # el administrador se cierra solo tras 10 min sin tocar nada
 
 
+ICONOS_MENU = {
+    "Nueva orden": "📝", "Órdenes": "📋", "Caja": "💰", "Clientes": "👥", "Asistencia": "🕘",
+    "Inventario": "📦", "Reportes": "📊", "Nómina": "💼", "Servicios y precios": "🏷️",
+    "Empleados y usuarios": "👤", "Transferencias": "📱", "Configuración": "⚙️",
+}
+
+
+def texto_menu(titulo: str) -> str:
+    """Ícono + nombre de la sección: se reconoce de un vistazo."""
+    return f"{ICONOS_MENU.get(titulo, '•')}   {titulo}"
+
+
 class _Actividad(QObject):
     def __init__(self, ventana):
         super().__init__(ventana)
@@ -89,10 +101,10 @@ class Ventana(QMainWindow):
 
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
-        self.nav.setFixedWidth(220)
+        self.nav.setFixedWidth(250)
         self.nav.setFocusPolicy(Qt.NoFocus)
         for i, p in enumerate(paginas):
-            self.nav.addItem(f"{p.titulo}")
+            self.nav.addItem(texto_menu(p.titulo))
             if i < 9:
                 QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self.shell, activated=lambda i=i: self.nav.setCurrentRow(i))
         raiz.addWidget(self.nav)
@@ -156,7 +168,7 @@ class Ventana(QMainWindow):
                 n = len(caja.listar_transferencias_pendientes(self.ctx.conn, self.ctx.admin))
                 for i, p in enumerate(self.paginas):
                     if p.titulo == "Transferencias":
-                        self.nav.item(i).setText(f"Transferencias ({n})" if n else "Transferencias")
+                        self.nav.item(i).setText(texto_menu("Transferencias") + (f"  ({n})" if n else ""))
         except Exception:  # el estado es informativo: si falla la consulta no se interrumpe al usuario
             pass
 

@@ -158,7 +158,7 @@ def imprimir_texto(texto: str, impresora: str | None = None) -> None:
         import win32print
     except ImportError:
         raise ErrorImpresion("La impresión directa requiere Windows y el paquete pywin32 (pip install pywin32). "
-                             "Mientras tanto puedes generar el PDF del ticket.")
+                             "Mientras tanto puede generar el PDF del ticket.")
     try:
         nombre = impresora or win32print.GetDefaultPrinter()
         datos = b"\x1b@" + b"\x1bt\x02" + texto.encode("cp850", errors="replace") + b"\n\n\n\n" + b"\x1dV\x42\x00"

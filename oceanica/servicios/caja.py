@@ -50,7 +50,7 @@ def registrar_pago_cur(cur, sesion, orden_id, metodo_pago_id, monto, tipo="pago"
     referencia = texto(referencia, "referencia", 60, False)
     corte = corte_abierto_cur(cur)
     if not corte:
-        raise ErrorNegocio("No hay caja abierta. Abre la caja antes de cobrar.")
+        raise ErrorNegocio("No hay caja abierta. Abra la caja antes de cobrar.")
     cur.execute("SELECT id, total, estado FROM ordenes WHERE id = %s FOR UPDATE", (orden_id,))
     orden = cur.fetchone()
     if not orden:
@@ -64,7 +64,7 @@ def registrar_pago_cur(cur, sesion, orden_id, metodo_pago_id, monto, tipo="pago"
         raise ErrorNegocio("Método de pago no válido.")
     por_confirmar = bool(metodo["requiere_confirmacion"]) and tipo != "reembolso"
     if por_confirmar and not referencia:
-        raise ErrorNegocio(f"Captura la clave de rastreo o referencia de la {metodo['nombre'].lower()}.")
+        raise ErrorNegocio(f"Escriba la clave de rastreo o referencia de la {metodo['nombre'].lower()}.")
     pagado = pagado_neto_cur(cur, orden_id)
     if tipo == "reembolso":
         if not es_admin(sesion):
@@ -297,7 +297,7 @@ def rechazar_transferencia(conn, sesion, pago_id: int, motivo: str) -> None:
         p = _pago_pendiente(cur, pago_id)
         corte = corte_abierto_cur(cur)
         if not corte:
-            raise ErrorNegocio("Abre la caja para registrar el rechazo.")
+            raise ErrorNegocio("Abra la caja para registrar el rechazo.")
         cur.execute("UPDATE pagos SET estado_confirmacion = 'rechazado', confirmado_por = %s, confirmado_en = NOW() "
                     "WHERE id = %s", (sesion["id"], pago_id))
         cur.execute(

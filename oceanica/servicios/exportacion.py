@@ -139,4 +139,4 @@ def exportar(reporte: dict, ruta, negocio: str = "") -> Path:
         return exportar_xlsx(reporte, ruta, negocio)
     if sufijo == ".pdf":
         return exportar_pdf(reporte, ruta, negocio)
-    raise ErrorNegocio("Formato no soportado: usa .xlsx o .pdf")
+    raise ErrorNegocio("Formato no soportado: use .xlsx o .pdf")

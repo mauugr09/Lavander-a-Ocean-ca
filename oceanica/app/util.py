@@ -64,7 +64,7 @@ def seguro(parent, fn, *args, **kwargs):
         log.exception("Error de base de datos")
         QMessageBox.critical(parent, "Oceánica",
                              "No se pudo completar la operación por un problema con la base de datos.\n"
-                             "Revisa que el servicio de MariaDB/MySQL esté encendido y vuelve a intentar.\n\n"
+                             "Revise que el servicio de MariaDB/MySQL esté encendido y vuelva a intentar.\n\n"
                              f"Detalle: {e}")
     except Exception:
         log.exception("Error inesperado")
@@ -104,7 +104,7 @@ def crear_tabla(columnas: list[str], derecha: tuple[int, ...] = (), estirar: int
     t.setShowGrid(False)
     t.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
     t.verticalHeader().setVisible(False)
-    t.verticalHeader().setDefaultSectionSize(34)
+    t.verticalHeader().setDefaultSectionSize(42)
     h = t.horizontalHeader()
     h.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
     h.setMinimumSectionSize(70)

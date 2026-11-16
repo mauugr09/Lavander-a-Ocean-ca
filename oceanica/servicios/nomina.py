@@ -287,7 +287,7 @@ def agregar_concepto(conn, sesion, nomina_empleado_id: int, clave: str, monto, d
         cur.execute("SELECT id, clave FROM conceptos_nomina")
         conceptos = {f["clave"]: f["id"] for f in cur.fetchall()}
         if clave not in conceptos or clave in ("SUELDO", "HEXTRA", "FALTA"):
-            raise ErrorNegocio("Concepto no válido para captura manual (usa BONO, OTRAPERC, RETARDO o DESCMAN).")
+            raise ErrorNegocio("Concepto no válido para captura manual (use BONO, OTRAPERC, RETARDO o DESCMAN).")
         _agregar_linea(cur, nomina_empleado_id, conceptos, clave, descripcion, monto, False)
         totales = _recalcular_totales(cur, nomina_empleado_id)
         if totales["neto"] < 0:

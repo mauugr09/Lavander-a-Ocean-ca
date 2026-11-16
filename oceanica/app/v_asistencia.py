@@ -46,7 +46,7 @@ class AjusteDialog(QDialog):
         self.motivo = QLineEdit()
         self.motivo.setPlaceholderText("Motivo (obligatorio)")
         self.filas = {}
-        for clave, etiq, w in (("e", "Empleado", self.empleado), ("f", "Día", self.fecha), ("a", "Qué quieres hacer", self.accion),
+        for clave, etiq, w in (("e", "Empleado", self.empleado), ("f", "Día", self.fecha), ("a", "Qué desea hacer", self.accion),
                                ("h", "Horas extra", self.horas), ("en", "Entrada", self.entrada), ("sa", "Salida", self.salida),
                                ("m", "Motivo", self.motivo)):
             form.addRow(etiq, w)
@@ -67,10 +67,10 @@ class AjusteDialog(QDialog):
 
     def _validar(self):
         if self.empleado.currentData() is None or not self.motivo.text().strip() and self.accion.currentData() != "descanso":
-            QMessageBox.warning(self, "Oceánica", "Elige al empleado y escribe el motivo.")
+            QMessageBox.warning(self, "Oceánica", "Elija al empleado y escriba el motivo.")
             return
         if self.accion.currentData() == "extra" and a_decimal(self.horas.text()) is None:
-            QMessageBox.warning(self, "Oceánica", "Escribe cuántas horas extra se autorizan.")
+            QMessageBox.warning(self, "Oceánica", "Escriba cuántas horas extra se autorizan.")
             return
         self.accept()
 
@@ -90,9 +90,12 @@ class AsistenciaView(QWidget):
         self.tabla = crear_tabla(["Empleado", "Estado", "Entrada", "Salida", "Retardo (min)"], derecha=(4,))
         lay.addWidget(self.tabla, 1)
         fila = QHBoxLayout()
-        self.b_llegada = QPushButton("Registrar mi llegada")
+        self.b_llegada = QPushButton("🟢  Registrar mi llegada")
         self.b_llegada.setProperty("rol", "primario")
-        self.b_salida = QPushButton("Registrar mi salida")
+        self.b_salida = QPushButton("🔴  Registrar mi salida")
+        for b in (self.b_llegada, self.b_salida):
+            b.setMinimumSize(260, 64)
+            b.setStyleSheet("font-size: 14pt; font-weight: 600;")
         fila.addWidget(self.b_llegada)
         fila.addWidget(self.b_salida)
         self.b_ajustes = QPushButton("Ajustes de la encargada…")
@@ -117,7 +120,7 @@ class AsistenciaView(QWidget):
 
     def _registrar(self, llegada: bool):
         sesion = self.ctx.identificar(self, sensible=True,
-                                      titulo="Registra tu llegada con tu PIN" if llegada else "Registra tu salida con tu PIN")
+                                      titulo="Registre su llegada con su PIN" if llegada else "Registre su salida con su PIN")
         if not sesion:
             return
         emp_id = sesion.get("empleado_id")
@@ -125,7 +128,7 @@ class AsistenciaView(QWidget):
             emp_id = id_seleccionado(self.tabla)
         if not emp_id:
             QMessageBox.warning(self, "Oceánica", "Esta cuenta no está ligada a un empleado."
-                                if not self.ctx.es_admin else "Selecciona al empleado en la tabla.")
+                                if not self.ctx.es_admin else "Seleccione al empleado en la tabla.")
             return
         fn = empleados.registrar_entrada if llegada else empleados.registrar_salida
         ok, r = seguro(self, fn, self.ctx.conn, sesion, emp_id)
