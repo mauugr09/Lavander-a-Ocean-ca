@@ -155,14 +155,14 @@ class MostradorView(QWidget):
         self.tabla_carrito.setStyleSheet("font-size: 11.5pt;")
         dl.addWidget(self.tabla_carrito, 1)
         fila_q = QHBoxLayout()
-        self.b_menos = poner(QPushButton(), "minus", tam=28)
-        self.b_mas = poner(QPushButton(), "plus", tam=28)
-        self.b_quitar = poner(QPushButton("Quitar"), "trash", tema.ERROR)
-        for b, tip in ((self.b_menos, "Una pieza menos"), (self.b_mas, "Una pieza más")):
-            b.setToolTip(tip)
-            b.setMinimumSize(64, 48)
-            b.setStyleSheet("font-size: 18pt; font-weight: 700;")
-        self.b_quitar.setMinimumHeight(48)
+        self.b_menos = poner(QPushButton("Quitar 1"), "minus")
+        self.b_mas = poner(QPushButton("Agregar 1"), "plus")
+        self.b_quitar = poner(QPushButton("Eliminar"), "trash", tema.ERROR)
+        self.b_menos.setToolTip("Quita una pieza del servicio seleccionado")
+        self.b_mas.setToolTip("Agrega una pieza más del servicio seleccionado")
+        self.b_quitar.setToolTip("Elimina de la orden todo el servicio seleccionado (pide confirmación)")
+        for b in (self.b_menos, self.b_mas, self.b_quitar):
+            b.setMinimumHeight(48)
         self.b_quitar.setProperty("rol", "peligro")
         fila_q.addWidget(self.b_menos)
         fila_q.addWidget(self.b_mas)
@@ -389,12 +389,24 @@ class MostradorView(QWidget):
     def _linea_actual(self) -> int:
         return self.tabla_carrito.currentRow()
 
+    def preguntar_eliminar(self, nombre: str, cantidad: str) -> bool:
+        caja_ = QMessageBox(QMessageBox.Question, "Eliminar de la orden",
+                            f"¿Está seguro de que desea eliminar «{nombre}» ({cantidad}) de la orden?", parent=self)
+        si = caja_.addButton("Sí, eliminar", QMessageBox.DestructiveRole)
+        no = caja_.addButton("No", QMessageBox.RejectRole)
+        caja_.setDefaultButton(no)
+        caja_.exec()
+        return caja_.clickedButton() is si
+
     def _sumar(self, delta: int):
-        """Más/menos en piezas. En kilos (o con doble clic) abre el teclado para cambiar la cantidad."""
+        """Quitar 1 / Agregar 1 en piezas. En kilos (o con doble clic) abre el teclado para cambiar la cantidad.
+        Si al quitar una pieza el servicio se queda en cero, se pide confirmación antes de eliminarlo."""
         r = self._linea_actual()
         if not 0 <= r < len(self.carrito.lineas):
             return
         l = self.carrito.lineas[r]
+        if delta < 0 and l.unidad == "pieza" and l.cantidad + delta <= 0:
+            return self._quitar()
         if l.unidad == "kilo" or delta == 0:
             if l.unidad == "kilo":
                 nuevo = self.pedir_kilos({"nombre": l.nombre, "precio": l.precio}, l.cantidad)
@@ -410,15 +422,28 @@ class MostradorView(QWidget):
             self.tabla_carrito.selectRow(r)
 
     def _quitar(self):
+        """Elimina todo el servicio seleccionado, después de confirmar."""
         r = self._linea_actual()
-        if r >= 0:
-            self.carrito.quitar(r)
-            self._refrescar_carrito()
+        if not 0 <= r < len(self.carrito.lineas):
+            return
+        l = self.carrito.lineas[r]
+        cant = cantidad_txt(l.cantidad, l.unidad).replace("pza", "pieza" if l.cantidad == 1 else "piezas")
+        if not self.preguntar_eliminar(l.nombre, cant):
+            return
+        self.carrito.quitar(r)
+        self._refrescar_carrito()
+        self._avisar(f"Se eliminó: {l.nombre}")
 
     def _estado_botones(self):
-        hay = 0 <= self._linea_actual() < len(self.carrito.lineas)
+        r = self._linea_actual()
+        hay = 0 <= r < len(self.carrito.lineas)
+        kilo = hay and self.carrito.lineas[r].unidad == "kilo"
         for b in (self.b_menos, self.b_mas, self.b_quitar):
             b.setEnabled(hay)
+        # en kilos no se suma de uno en uno: un solo botón abre el teclado
+        self.b_menos.setText("Cambiar kilos" if kilo else "Quitar 1")
+        poner(self.b_menos, "pencil" if kilo else "minus")
+        self.b_mas.setVisible(not kilo)
 
     def _refrescar_carrito(self):
         filas = [(i, [l.nombre, cantidad_txt(l.cantidad, l.unidad), dinero(l.importe)])

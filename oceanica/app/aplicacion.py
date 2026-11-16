@@ -7,6 +7,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import mysql.connector
+from PySide6.QtCore import QLibraryInfo, QLocale, QTranslator
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -34,6 +35,11 @@ def preparar_aplicacion() -> QApplication:
     app.setFont(QFont("Segoe UI", 10))
     app.setStyleSheet(tema.HOJA_ESTILO)
     app.setWindowIcon(QIcon(str(RECURSOS / "icono.png")))
+    # Botones y textos estándar de Qt en español («Sí», «No», «Cancelar», calendario…)
+    traductor = QTranslator(app)
+    if traductor.load(QLocale("es_MX"), "qtbase", "_", QLibraryInfo.path(QLibraryInfo.TranslationsPath)):
+        app.installTranslator(traductor)
+    QLocale.setDefault(QLocale("es_MX"))
     return app
 
 

@@ -135,7 +135,18 @@ def test_flujo_completo_por_pantalla(qapp, conn, admin, empleado, mundo, monkeyp
     m.elegir(m.visibles[0])
     assert m.lb_total.text() == "$240.00"
     m.tabla_carrito.selectRow(0)
-    m._sumar(-1)
+    m._sumar(-1)                                     # «Quitar 1»: queda una pieza
+    assert m.carrito.lineas[0].cantidad == 1
+    preguntas = []
+    m.preguntar_eliminar = lambda nombre, cant: preguntas.append((nombre, cant)) or False
+    m._sumar(-1)                                     # la última pieza: pide confirmación y aquí dice «No»
+    assert preguntas == [("Edredón", "1 pieza")] and len(m.carrito.lineas) == 1
+    m.elegir(m.visibles[0])
+    m.elegir(m.visibles[0])
+    m.tabla_carrito.selectRow(0)
+    m._quitar()                                      # «Eliminar» todo el servicio: también pregunta
+    assert preguntas[-1] == ("Edredón", "3 piezas") and len(m.carrito.lineas) == 1
+    m.preguntar_eliminar = lambda nombre, cant: True
     m._quitar()
     assert not m.carrito
     # ropa por kilo: el botón grande abre el teclado (aquí simulado) con los kilos de la báscula
@@ -143,7 +154,8 @@ def test_flujo_completo_por_pantalla(qapp, conn, admin, empleado, mundo, monkeyp
     m.abrir_kilo()
     assert m.lb_total.text() == "$85.50"
     m.tabla_carrito.selectRow(0)
-    m._sumar(1)                                      # en kilos, ＋ abre el teclado para corregir
+    assert m.b_menos.text() == "Cambiar kilos" and not m.b_mas.isVisibleTo(m)
+    m._sumar(-1)                                     # en kilos, «Cambiar kilos» abre el teclado para corregir
     assert m.lb_total.text() == "$114.00"
     cid = clientes.crear_cliente(conn, admin, "Ana", "Torres", "5511112222")
     m.cliente_id = cid
