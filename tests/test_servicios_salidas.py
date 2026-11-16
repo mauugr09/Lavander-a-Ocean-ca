@@ -127,11 +127,17 @@ def test_ticket_de_orden(conn, negocio, tmp_path):
     configuracion.establecer(conn, {"rol": "administrador", "id": 1}, "negocio_nombre", "Lavandería Oceánica")
     t = tickets.ticket_orden_texto(conn, negocio["b"])
     assert "OC-000002" in t and "TOTAL" in t and "240.00" in t
-    assert "SALDO PENDIENTE" in t and "140.00" in t and "Tarjeta" in t
+    assert "POR LIQUIDAR" in t and "140.00" in t and "Tarjeta" in t
     assert all(len(l) <= 42 for l in t.splitlines())
     assert "Lavandería Oceánica" in t.splitlines()[0]
+    for seccion in ("DATOS DEL CLIENTE", "DETALLES DE LA ORDEN #2", "CONDICIONES DEL SERVICIO", "ALMACENAJE",
+                    "Firma:", "***GRACIAS POR SU PREFERENCIA***", "lavanderiaoceanica.com"):
+        assert seccion in t, seccion
+    assert "* Responsabilidad limitada" in t                  # una condición por renglón, con viñeta
     pdf = tickets.ticket_orden_pdf(conn, negocio["a"], tmp_path / "ticket.pdf")
     assert pdf.read_bytes().startswith(b"%PDF")
+    logo = tickets.logo_escpos(42)                            # imagen ESC/POS centrada para la térmica
+    assert logo.startswith(b"\x1ba\x01\x1dv0\x00") and len(logo) > 1000
     assert "CANCELADA" in tickets.ticket_orden_texto(conn, negocio["c"])
 
 

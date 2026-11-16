@@ -8,7 +8,13 @@ from ..servicios import configuracion
 from .util import crear_tabla, etiqueta, id_seleccionado, poblar, seguro
 
 OPCIONES = {"entrega_requiere_pago_total": ("si", "no"), "asistencia_paga_justificada": ("si", "no"),
-            "entrega_transferencia_pendiente": ("no", "admin", "todos")}
+            "entrega_transferencia_pendiente": ("no", "admin", "todos"), "ticket_logo": ("si", "no")}
+MULTILINEA = {"ticket_condiciones": "Una condición por renglón.", "ticket_almacenaje": ""}
+
+
+def _resumen(valor: str) -> str:
+    v = " · ".join(l.strip() for l in (valor or "").splitlines() if l.strip())
+    return v if len(v) <= 70 else v[:69] + "…"
 
 
 class ConfigView(QWidget):
@@ -41,7 +47,7 @@ class ConfigView(QWidget):
     def al_mostrar(self):
         ok, filas = seguro(self, configuracion.listar, self.ctx.conn)
         self.filas = {f["clave"]: f for f in filas or []}
-        poblar(self.tabla, [(f["clave"], [f["descripcion"] or f["clave"], f["valor"]]) for f in self.filas.values()])
+        poblar(self.tabla, [(f["clave"], [f["descripcion"] or f["clave"], _resumen(f["valor"])]) for f in self.filas.values()])
 
     def editar(self):
         clave = id_seleccionado(self.tabla)
@@ -51,6 +57,10 @@ class ConfigView(QWidget):
         if clave in OPCIONES:
             ops = list(OPCIONES[clave])
             valor, ok = QInputDialog.getItem(self, "Cambiar ajuste", f["descripcion"] or clave, ops, max(0, ops.index(f["valor"]) if f["valor"] in ops else 0), False)
+        elif clave in MULTILINEA:
+            valor, ok = QInputDialog.getMultiLineText(self, "Cambiar ajuste",
+                                                      f"{f['descripcion'] or clave}\n{MULTILINEA[clave]}".strip(),
+                                                      f["valor"])
         else:
             valor, ok = QInputDialog.getText(self, "Cambiar ajuste", f["descripcion"] or clave, text=f["valor"])
         if ok and seguro(self, configuracion.establecer, self.ctx.conn, self.ctx.admin, clave, valor)[0]:

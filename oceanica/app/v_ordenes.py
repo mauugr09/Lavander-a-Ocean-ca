@@ -331,4 +331,5 @@ class OrdenesView(QWidget):
         if self.orden:
             oid = self.orden["id"]
             TicketDialog(self, tickets.ticket_orden_texto(self.ctx.conn, oid), f"{self.orden['folio']}.pdf",
-                         f"Ticket {self.orden['folio']}", imprimir=lambda: tickets.imprimir_ticket_orden(self.ctx.conn, oid)).exec()
+                         f"Ticket {self.orden['folio']}", imprimir=lambda: tickets.imprimir_ticket_orden(self.ctx.conn, oid),
+                         logo=tickets.logo_activo(self.ctx.conn)).exec()

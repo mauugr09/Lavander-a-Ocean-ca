@@ -10,7 +10,8 @@ _NUMERICAS = {
     "descuento_max_pct_empleado", "nomina_jornada_horas", "nomina_factor_hora_extra", "ticket_ancho",
     "nomina_salario_minimo_diario", "nomina_pago_hora_extra",
 }
-_SI_NO = {"entrega_requiere_pago_total", "asistencia_paga_justificada", "horas_extra_automaticas"}
+_TEXTOS_LARGOS = {"ticket_condiciones", "ticket_almacenaje"}
+_SI_NO = {"entrega_requiere_pago_total", "asistencia_paga_justificada", "horas_extra_automaticas", "ticket_logo"}
 _OPCIONES = {"entrega_transferencia_pendiente": ("no", "admin", "todos")}
 
 
@@ -36,7 +37,8 @@ def obtener(conn, clave: str, defecto: str = "") -> str:
 
 def establecer(conn, sesion, clave: str, valor: str) -> None:
     requerir_rol(sesion, "administrador")
-    valor = texto(valor, clave, 255, obligatorio=clave in _NUMERICAS or clave in _SI_NO or clave in _OPCIONES) or ""
+    largo = 2000 if clave in _TEXTOS_LARGOS else 255
+    valor = texto(valor, clave, largo, obligatorio=clave in _NUMERICAS or clave in _SI_NO or clave in _OPCIONES) or ""
     if clave in _NUMERICAS:
         try:
             if float(valor) < 0:

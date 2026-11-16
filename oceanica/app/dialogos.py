@@ -1,9 +1,9 @@
 """Diálogos reutilizables: identificación por PIN, cobro, cliente y vista de ticket."""
 from __future__ import annotations
 
-from PySide6.QtCore import QRegularExpression, QUrl
-from PySide6.QtGui import QDesktopServices, QFont, QRegularExpressionValidator
-from PySide6.QtWidgets import (QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLineEdit,
+from PySide6.QtCore import QRegularExpression, Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QFont, QPixmap, QRegularExpressionValidator
+from PySide6.QtWidgets import (QButtonGroup, QComboBox, QDialog, QLabel, QDialogButtonBox, QFormLayout, QHBoxLayout, QLineEdit,
                                QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout)
 
 from ..config import RAIZ
@@ -198,11 +198,17 @@ class ClienteDialog(QDialog):
 class TicketDialog(QDialog):
     """Vista previa del ticket con impresión directa (Windows) o PDF."""
 
-    def __init__(self, parent, texto: str, nombre_pdf: str, titulo: str = "Ticket", imprimir=None):
+    def __init__(self, parent, texto: str, nombre_pdf: str, titulo: str = "Ticket", imprimir=None, logo: bool = False):
         super().__init__(parent)
-        self.texto, self.nombre_pdf, self._imprimir = texto, nombre_pdf, imprimir
+        self.texto, self.nombre_pdf, self._imprimir, self.logo = texto, nombre_pdf, imprimir, logo
         self.setWindowTitle(titulo)
         lay = QVBoxLayout(self)
+        if logo and tickets.RUTA_LOGO.exists():
+            lb = QLabel(self)
+            lb.setPixmap(QPixmap(str(tickets.RUTA_LOGO)).scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            lb.setAlignment(Qt.AlignCenter)
+            lb.setStyleSheet("background: white; padding: 8px;")
+            lay.addWidget(lb)
         vista = QPlainTextEdit(texto)
         vista.setReadOnly(True)
         fuente = QFont("Consolas")
@@ -227,7 +233,7 @@ class TicketDialog(QDialog):
         b_cerrar.setDefault(True)
 
     def generar_pdf(self):
-        return tickets.texto_a_pdf_ticket(self.texto, RAIZ / "tickets" / self.nombre_pdf)
+        return tickets.texto_a_pdf_ticket(self.texto, RAIZ / "tickets" / self.nombre_pdf, self.logo)
 
     def abrir_pdf(self):
         ruta = self.generar_pdf()

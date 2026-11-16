@@ -8,7 +8,7 @@ La aplicación de escritorio (PySide6) se inicia con `python -m oceanica`. Falta
 
 | Ruta | Contenido |
 |---|---|
-| `db/migrations/001..008` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente, categorías del mostrador y servicio a domicilio |
+| `db/migrations/001..009` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente, categorías del mostrador y servicio a domicilio |
 | `oceanica/init_db.py` | Instalador: crea la base, un usuario MySQL limitado y el primer administrador |
 | `oceanica/migrar.py` | Aplica migraciones pendientes al actualizar el sistema |
 | `oceanica/respaldos.py` | Respaldo `.sql.gz` con mysqldump, copia externa, retención y restauración |
@@ -43,6 +43,7 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 - **Horarios**: matutino 9-15, vespertino 12-18, sábado 9-17; cada empleado tiene su día de descanso (Empleados y usuarios → «Horario…»). Los días de descanso no generan avisos. Tolerancia de entrada: 10 min, el retardo solo se registra.
 - **Pago**: en efectivo (sale de la caja) o por transferencia (no mueve la caja), con recibo PDF para firma.
 - **Panel del negocio** (administrador): vendido hoy, en la semana y en el mes contra el periodo anterior; ventas de los últimos 12 meses con el mejor mes resaltado; avance del mes día por día contra el mes anterior; clientes más frecuentes, servicios que más venden, formas de pago y datos del periodo (este mes, últimos 3 meses o este año). Las gráficas se dibujan con QPainter (`oceanica/app/graficas.py`): no requieren Qt Charts ni nada fuera de PySide6-Essentials.
+- **Ticket de la orden** con el diseño de la lavandería: logo arriba (en PDF y en la térmica como imagen ESC/POS), datos del cliente, detalle en columnas (Cant, Servicio, P.U., Ud, Importe), anticipo y por liquidar, condiciones del servicio, almacenaje, líneas de firma, agradecimiento y página web. Los textos se cambian en «Configuración» (`ticket_condiciones`, `ticket_almacenaje`, `ticket_pie`, `negocio_web`, `ticket_logo`).
 - **Entrega**: con saldo o con transferencia por confirmar, el empleado pide autorización a la encargada (usuario y contraseña de administrador). Transferencias: basta la captura de pantalla; la encargada confirma después en el banco.
 - Impresora de tickets: térmica genérica ESC/POS de 80 mm.
 

@@ -582,4 +582,5 @@ class MostradorView(QWidget):
         self.limpiar()
         TicketDialog(self, tickets.ticket_orden_texto(self.ctx.conn, oid), f"{orden['folio']}.pdf",
                      f"Orden {orden['folio']} creada",
-                     imprimir=lambda: tickets.imprimir_ticket_orden(self.ctx.conn, oid)).exec()
+                     imprimir=lambda: tickets.imprimir_ticket_orden(self.ctx.conn, oid),
+                     logo=tickets.logo_activo(self.ctx.conn)).exec()
