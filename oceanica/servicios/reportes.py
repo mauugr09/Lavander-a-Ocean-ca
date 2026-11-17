@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from ..db import transaccion
-from .comunes import CERO, como_fecha, requerir_rol
+from .comunes import CERO, como_fecha, config_valor, requerir_rol
 from . import facturacion
 from . import nomina as svc_nomina
 
@@ -148,6 +148,45 @@ def ordenes_pendientes(conn) -> dict:
             ("estado", "Estado", "texto"), ("fecha_promesa", "Promesa", "fechahora"),
             ("dias_retraso", "Días de retraso", "numero"), ("total", "Total", "dinero"), ("saldo", "Saldo", "dinero")]
     return _reporte("Órdenes pendientes", cols, filas, "Órdenes recibidas, en proceso o listas", ("total", "saldo"))
+
+
+def ropa_olvidada(conn) -> dict:
+    """Órdenes listas que llevan esperando más días de los configurados («almacenaje_dias», 30 por omisión).
+    Los días cuentan desde que la orden se marcó como lista, no desde que se recibió."""
+    with transaccion(conn) as cur:
+        try:
+            limite = max(0, int(float(config_valor(cur, "almacenaje_dias", "30") or 30)))
+        except ValueError:
+            limite = 30
+    filas = _consulta(
+        conn, "SELECT o.folio, CONCAT_WS(' ', c.nombre, c.apellidos) AS cliente, c.telefono, h.lista_desde, "
+              "DATEDIFF(CURDATE(), h.lista_desde) AS dias, o.total, s.saldo, o.avisado_en "
+              "FROM ordenes o JOIN v_saldo_ordenes s ON s.orden_id = o.id "
+              "JOIN (SELECT orden_id, MAX(cambiado_en) AS lista_desde FROM orden_historial_estado "
+              "      WHERE estado_nuevo = 'lista' GROUP BY orden_id) h ON h.orden_id = o.id "
+              "LEFT JOIN clientes c ON c.id = o.cliente_id "
+              "WHERE o.estado = 'lista' AND DATEDIFF(CURDATE(), h.lista_desde) >= %s "
+              "ORDER BY h.lista_desde", (limite,))
+    cols = [("folio", "Folio", "texto"), ("cliente", "Cliente", "texto"), ("telefono", "Teléfono", "texto"),
+            ("lista_desde", "Lista desde", "fecha"), ("dias", "Días esperando", "numero"),
+            ("total", "Total", "dinero"), ("saldo", "Por cobrar", "dinero"), ("avisado_en", "Último aviso", "fechahora")]
+    return _reporte("Ropa olvidada", cols, filas, f"Órdenes listas con {limite} días o más sin recoger",
+                    ("total", "saldo"))
+
+
+def entregas_domicilio(conn) -> dict:
+    """Ruta de reparto: órdenes a domicilio sin entregar, primero las que ya están listas."""
+    filas = _consulta(
+        conn, "SELECT o.folio, CONCAT_WS(' ', c.nombre, c.apellidos) AS cliente, c.telefono, o.direccion_entrega, "
+              "CASE o.estado WHEN 'lista' THEN 'Lista' WHEN 'en_proceso' THEN 'En proceso' ELSE 'Recibida' END AS estado, "
+              "o.fecha_promesa, s.saldo "
+              "FROM ordenes o JOIN v_saldo_ordenes s ON s.orden_id = o.id LEFT JOIN clientes c ON c.id = o.cliente_id "
+              "WHERE o.tipo_entrega = 'domicilio' AND o.estado IN ('recibida', 'en_proceso', 'lista') "
+              "ORDER BY (o.estado = 'lista') DESC, o.fecha_promesa, o.id")
+    cols = [("folio", "Folio", "texto"), ("cliente", "Cliente", "texto"), ("telefono", "Teléfono", "texto"),
+            ("direccion_entrega", "Dirección", "texto"), ("estado", "Estado", "texto"),
+            ("fecha_promesa", "Promesa", "fechahora"), ("saldo", "Por cobrar", "dinero")]
+    return _reporte("Entregas a domicilio", cols, filas, "Órdenes a domicilio pendientes de entregar", ("saldo",))
 
 
 def transferencias_pendientes(conn, sesion) -> dict:

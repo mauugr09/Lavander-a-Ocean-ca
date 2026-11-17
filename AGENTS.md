@@ -54,5 +54,6 @@ trabajado a salario mínimo, hora extra solo autorizada ($50), sin ISR/IMSS/CFDI
 ## Fuera de alcance salvo petición expresa
 
 - «Nómina avanzada» (cotizada aparte).
-- Etiquetas y código de barras: pendiente de confirmar con el cliente. No inventarlo.
+- Código de barras y lector: pendiente de confirmar con el cliente. No inventarlo. (Las etiquetas de bolsa de solo
+  texto sí existen: `tickets.etiquetas_bolsa_texto`.)
 - Timbrado de CFDI.

@@ -44,6 +44,9 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 Antes de cada actualización: respaldo manual (`python -m oceanica.respaldos --manual`, o Configuración → Respaldo).
 Después: `python -m oceanica.migrar` (o `OceanicaAdmin.exe migrar`). Solo aplica lo pendiente; volver a correrlo no hace nada.
 
+- **Migraciones 012 y 013 (aviso de orden lista, ropa olvidada).** 012 agrega a `ordenes` cuándo y quién avisó al
+  cliente que su ropa está lista. 013 agrega el ajuste `almacenaje_dias` (30) que usa el reporte de ropa olvidada.
+  Además cambia el cierre de caja: el empleado ya no ve el resumen de dinero (corte a ciegas).
 - **Migraciones 007 a 009 (mostrador, domicilio, ticket).** 007 agrega el orden de las categorías del mostrador y
   **renombra categorías existentes** («Lavado por kilo» → «Ropa por kilo», «Edredones y cobijas» → «Colchas y
   edredones», «Tintorería» → «Estilo tintorería»). 008 agrega a `ordenes` el tipo de entrega, el cargo y la dirección
@@ -96,6 +99,14 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 - Al iniciar el día: contar el efectivo y **Abrir caja** con ese fondo. Sin caja abierta no se puede cobrar.
 - Gastos, ingresos y retiros: **Registrar gasto, ingreso o retiro**.
 - Al cerrar: **Cerrar caja (corte del día)**, escribir el efectivo contado; si no coincide con lo esperado, se pide la explicación. Sale el ticket del corte. Historial en Reportes → Cortes de caja.
+- **Corte a ciegas:** en modo mostrador no se muestra el resumen de dinero ni el efectivo esperado, y si el conteo no cuadra no se dice por cuánto. La encargada sí lo ve. Cada conteo rechazado queda en la bitácora (`caja_conteo_rechazado`), para detectar a quien prueba montos hasta atinar. Límite: un empleado que sume sus propios cobros del día puede estimar lo esperado; esto quita la tentación fácil, no sustituye revisar los cortes.
+
+### Operación diaria
+- **Aviso de respaldo:** en modo administrador, la barra superior dice de cuándo es el último respaldo. Naranja si tiene más de un día, nunca se ha hecho o el archivo ya no está; gris si no se copió al disco externo.
+- **Avisar por WhatsApp** (Órdenes, orden lista): abre WhatsApp con el mensaje ya escrito para el teléfono del cliente. El sistema no envía nada: lo manda el empleado y confirma que lo envió; queda anotado cuándo y quién. Requiere WhatsApp Web o de escritorio con sesión iniciada en esa PC y teléfonos de 10 dígitos.
+- **Etiquetas de bolsa** (Órdenes): una etiqueta de texto por bolsa («BOLSA 1 DE 3», folio, cliente, entrega) en la misma impresora de tickets. Sin código de barras.
+- **Reportes → Entregas a domicilio:** la ruta de reparto, con dirección, teléfono y lo que falta cobrar; primero las que ya están listas.
+- **Reportes → Ropa olvidada:** órdenes listas que llevan más de `almacenaje_dias` sin recogerse, con el último aviso. El sistema no calcula ni cobra cuota de almacenaje: solo las lista.
 
 ### Ticket de la orden
 Logo arriba (vista previa, PDF y térmica como imagen ESC/POS), datos del cliente, detalle en columnas (Cant, Servicio, P.U., Ud, Importe), anticipo y por liquidar, condiciones del servicio, almacenaje, líneas de firma, agradecimiento y página web. Los textos se cambian en Configuración: `ticket_condiciones`, `ticket_almacenaje`, `ticket_pie`, `negocio_web`, `ticket_logo`, `ticket_ancho` (42 para 80 mm, 32 para 58 mm) e `impresora_ticket`.
@@ -172,5 +183,5 @@ En una base de pruebas: `python -m oceanica.datos_demo`. Crea servicios con prec
   En modo RAW, Windows no avisa si la impresora no tiene papel: el ticket puede «imprimirse» sin salir.
 - `construir_exe.bat`, `Oceanica.exe`, `OceanicaAdmin.exe` y el instalador no se han verificado en Windows con la factura.
 - No timbra facturas (CFDI): solo controla cuáles hay que hacer. Funciona en una sola computadora.
-- Etiquetas y código de barras: pendiente de confirmar con el cliente (issue #1 del repositorio). No está construido.
+- Código de barras y lector: pendiente de confirmar con el cliente (issue #1 del repositorio). No está construido; las etiquetas de bolsa son solo texto.
 - Nómina no es fiscal: no sustituye CFDI ni obligaciones de IMSS/SAT.

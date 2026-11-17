@@ -19,6 +19,8 @@ REPORTES = [
     ("Cobros por método de pago", reportes.cobros_por_metodo, True, False),
     ("Ventas por servicio", reportes.ventas_por_servicio, True, False),
     ("Órdenes pendientes", reportes.ordenes_pendientes, False, False),
+    ("Entregas a domicilio", reportes.entregas_domicilio, False, False),
+    ("Ropa olvidada", reportes.ropa_olvidada, False, False),
     ("Clientes frecuentes", reportes.clientes_frecuentes, False, False),
     ("Insumos bajo el mínimo", reportes.insumos_bajos, False, False),
     ("Asistencia", reportes.asistencia, True, False),

@@ -52,6 +52,9 @@ class CajaView(QWidget):
         pa.addWidget(self.lb_estado)
         self.tabla_res = crear_tabla(["Concepto", "Monto"], derecha=(1,))
         pa.addWidget(self.tabla_res)
+        self.lb_ciego = etiqueta("El resumen de dinero lo ve la encargada. Al cerrar la caja, cuente el efectivo del cajón "
+                                 "y escriba lo que hay: el sistema lo compara con lo registrado.", "suave", True)
+        pa.addWidget(self.lb_ciego)
         pa.addWidget(etiqueta("Movimientos de la caja", "subtitulo"))
         self.tabla_mov = crear_tabla(["Hora", "Tipo", "Concepto", "Monto", "Quién"], derecha=(3,), estirar=2)
         pa.addWidget(self.tabla_mov, 1)
@@ -81,17 +84,20 @@ class CajaView(QWidget):
             return
         r = caja.resumen_corte(self.ctx.conn, corte["id"])
         self.lb_estado.setText(f"Caja abierta desde {fecha_hora(corte['abierta_en'])}")
-        filas = [("fondo", ["Fondo inicial", dinero(corte["fondo_inicial"])])]
-        filas += [(f"m{i}", [f"Cobrado en {m['metodo'].lower()}", dinero(m["total"])]) for i, m in enumerate(r["por_metodo"])]
-        filas += [("i", ["Ingresos", dinero(r["ingresos"])]), ("g", ["Gastos", "-" + dinero(r["gastos"])]),
-                  ("r", ["Retiros", "-" + dinero(r["retiros"])])]
-        if self.ctx.es_admin:
-            filas.append(("e", ["Efectivo esperado en caja", dinero(r["efectivo_esperado"])]))
+        # Corte a ciegas: el empleado no ve cuánto dinero debería haber (ni las cifras para calcularlo).
+        self.tabla_res.setVisible(self.ctx.es_admin)
+        self.lb_ciego.setVisible(not self.ctx.es_admin)
         pend = r["transferencias_pendientes"]
-        if pend["cantidad"]:
-            filas.append(("p", [f"Transferencias por confirmar ({pend['cantidad']})", dinero(pend["total"])]))
-        poblar(self.tabla_res, filas)
-        self.tabla_res.setFixedHeight(48 + 42 * len(filas))
+        if self.ctx.es_admin:
+            filas = [("fondo", ["Fondo inicial", dinero(corte["fondo_inicial"])])]
+            filas += [(f"m{i}", [f"Cobrado en {m['metodo'].lower()}", dinero(m["total"])]) for i, m in enumerate(r["por_metodo"])]
+            filas += [("i", ["Ingresos", dinero(r["ingresos"])]), ("g", ["Gastos", "-" + dinero(r["gastos"])]),
+                      ("r", ["Retiros", "-" + dinero(r["retiros"])]),
+                      ("e", ["Efectivo esperado en caja", dinero(r["efectivo_esperado"])])]
+            if pend["cantidad"]:
+                filas.append(("p", [f"Transferencias por confirmar ({pend['cantidad']})", dinero(pend["total"])]))
+            poblar(self.tabla_res, filas)
+            self.tabla_res.setFixedHeight(48 + 42 * len(filas))
         movs = caja.movimientos_corte(self.ctx.conn, corte["id"])
         poblar(self.tabla_mov, [(m["id"], [m["creado_en"].strftime("%H:%M"), TIPOS[m["tipo"]].split(" (")[0], m["concepto"],
                                           dinero(m["monto"]), m["usuario"]]) for m in movs])
@@ -149,8 +155,9 @@ class CajaView(QWidget):
                 self._intentar_cierre(sesion, contado)
             if ok or r != "diferencia":
                 break
-            obs, ok2 = QInputDialog.getText(self, "Hay diferencia", "El efectivo no coincide con lo esperado.\n"
-                                            "Explique la diferencia para poder cerrar:")
+            obs, ok2 = QInputDialog.getText(self, "Hay diferencia", "El efectivo contado no coincide con lo registrado.\n"
+                                            "Si quiere volver a contar, pulse Cancelar. Si el conteo es correcto,\n"
+                                            "explique la diferencia para poder cerrar:")
             if not ok2 or not obs.strip():
                 return
         if ok and isinstance(r, dict):
