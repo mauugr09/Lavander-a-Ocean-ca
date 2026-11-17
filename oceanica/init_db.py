@@ -21,6 +21,25 @@ from .seguridad import crear_usuario, validar_politica
 _IDENT = re.compile(r"^[A-Za-z0-9_]{1,32}$")
 
 
+# El programa se conecta por TCP a 127.0.0.1. Si el servidor tiene `skip-name-resolve`, esa conexión NO coincide con
+# un usuario creado como @'localhost' (que entonces solo vale para el socket) y se rechaza con «Access denied».
+# Por eso el usuario se crea para las tres formas de la misma computadora; ninguna da acceso desde la red.
+HOSTS_LOCALES = ("localhost", "127.0.0.1", "::1")
+
+
+def crear_base_y_usuario(cur, base: str, usuario_app: str, pass_app: str) -> None:
+    """Crea la base y el usuario limitado del sistema (permisos solo sobre esa base; el sistema nunca usa root).
+    Se puede volver a ejecutar: si el usuario ya existe, solo le cambia la contraseña."""
+    if not (_IDENT.match(base) and _IDENT.match(usuario_app)):
+        raise ValueError("Los nombres solo pueden llevar letras, números y guion bajo.")
+    cur.execute(f"CREATE DATABASE IF NOT EXISTS `{base}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+    for host in HOSTS_LOCALES:
+        cur.execute(f"CREATE USER IF NOT EXISTS '{usuario_app}'@'{host}' IDENTIFIED BY %s", (pass_app,))
+        cur.execute(f"ALTER USER '{usuario_app}'@'{host}' IDENTIFIED BY %s", (pass_app,))
+        cur.execute(f"GRANT ALL PRIVILEGES ON `{base}`.* TO '{usuario_app}'@'{host}'")
+    cur.execute("FLUSH PRIVILEGES")
+
+
 def _pedir_password_admin() -> str:
     while True:
         p1 = getpass.getpass("Contraseña para el administrador: ")
@@ -78,14 +97,7 @@ def main() -> int:
 
     pass_app = secrets.token_urlsafe(24)
     cur = admin.cursor()
-    cur.execute(
-        f"CREATE DATABASE IF NOT EXISTS `{base}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-    )
-    cur.execute(f"CREATE USER IF NOT EXISTS '{usuario_app}'@'localhost' IDENTIFIED BY %s", (pass_app,))
-    cur.execute(f"ALTER USER '{usuario_app}'@'localhost' IDENTIFIED BY %s", (pass_app,))
-    # Permisos solo sobre esta base: el sistema nunca usa root.
-    cur.execute(f"GRANT ALL PRIVILEGES ON `{base}`.* TO '{usuario_app}'@'localhost'")
-    cur.execute("FLUSH PRIVILEGES")
+    crear_base_y_usuario(cur, base, usuario_app, pass_app)
     cur.close()
     admin.close()
 

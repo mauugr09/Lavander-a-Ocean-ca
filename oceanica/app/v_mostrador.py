@@ -10,10 +10,10 @@ from decimal import Decimal
 
 from PySide6.QtCore import QStringListModel, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QCompleter, QDateTimeEdit, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+from PySide6.QtWidgets import (QCheckBox, QCompleter, QDateTimeEdit, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QPushButton, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
-from ..servicios import caja, catalogo, clientes, configuracion, ordenes, tickets
+from ..servicios import caja, catalogo, clientes, configuracion, facturacion, ordenes, tickets
 from .botones import COLORES, BotonGrande, KilosDialog, es_categoria_kilo, icono_para, normalizar
 from . import tema
 from .carrito import Carrito
@@ -59,6 +59,7 @@ class MostradorView(QWidget):
         self.visibles: list[dict] = []          # opciones que se ven ahora (categoría abierta o búsqueda)
         self.cat_kilo: dict | None = None
         self.cliente_id: int | None = None
+        self.datos_clientes: dict[int, dict] = {}
         self.mapa_clientes: dict[str, int] = {}
 
         raiz = QHBoxLayout(self)
@@ -222,6 +223,10 @@ class MostradorView(QWidget):
         pd.addLayout(fila_c)
         dl.addWidget(self.p_domicilio)
         self.p_domicilio.setVisible(False)
+        self.factura = QCheckBox("Requiere &factura  (Alt+F)")
+        self.factura.setToolTip("El cliente pide factura. Necesita un cliente; la factura se hace fuera del sistema.")
+        self.factura.setMinimumHeight(32)
+        dl.addWidget(self.factura)
         fila_b = QHBoxLayout()
         self.b_limpiar = QPushButton("Empezar de nuevo")
         self.b_limpiar.setMinimumHeight(56)
@@ -252,6 +257,7 @@ class MostradorView(QWidget):
         self.b_recoge.clicked.connect(lambda: self.elegir_entrega("mostrador"))
         self.b_domicilio.clicked.connect(lambda: self.elegir_entrega("domicilio"))
         self.cargo.textChanged.connect(self._refrescar_totales)
+        self.factura.toggled.connect(lambda _: self._info_cliente())
         for tecla, accion in (("F2", self.filtro.setFocus), ("F3", self.cliente.setFocus), ("F4", self.nuevo_cliente),
                               ("F5", self.guardar), ("Esc", self._escape)):
             QShortcut(QKeySequence(tecla), self, activated=accion)
@@ -489,12 +495,13 @@ class MostradorView(QWidget):
     # -------------------------------------------------------------- cliente
     def _buscar_clientes(self, texto: str):
         self.cliente_id = None
-        self.info_cli.setText("")
+        self._info_cliente()
         if len(texto.strip()) < 2:
             self.modelo_cli.setStringList([])
             return
         ok, filas = seguro(self, clientes.buscar_clientes, self.ctx.conn, texto, True, 10)
         self.mapa_clientes = {}
+        self.datos_clientes = {c["id"]: c for c in filas or []}
         for c in filas or []:
             nombre = " ".join(filter(None, [c["nombre"], c["apellidos"]]))
             etiq = f"{nombre} · {c['telefono']}" if c["telefono"] else nombre
@@ -506,12 +513,26 @@ class MostradorView(QWidget):
     def _elegir_cliente(self, etiqueta_: str):
         self.cliente_id = self.mapa_clientes.get(etiqueta_)
         if self.cliente_id:
-            self.info_cli.setText("Cliente seleccionado")
+            self._info_cliente("Cliente seleccionado")
+
+    def _info_cliente(self, base: str | None = None):
+        """Debajo del cliente: si se eligió y, cuando pide factura, qué datos fiscales le faltan."""
+        if base is None:
+            base = "Cliente seleccionado" if self.cliente_id else ""
+        extra = ""
+        if self.factura.isChecked():
+            if not self.cliente_id:
+                extra = "Para facturar, elija o dé de alta al cliente (F4)."
+            else:
+                falta = facturacion.faltantes(self.datos_clientes.get(self.cliente_id))
+                extra = "Datos de factura completos." if not falta else (
+                    "Faltan datos de factura: " + ", ".join(falta) + ". Captúrelos en «Clientes».")
+        self.info_cli.setText("  ·  ".join(t for t in (base, extra) if t))
 
     def _quitar_cliente(self):
         self.cliente.clear()
         self.cliente_id = None
-        self.info_cli.setText("")
+        self._info_cliente()
 
     def nuevo_cliente(self):
         dlg = ClienteDialog(self)
@@ -525,7 +546,9 @@ class MostradorView(QWidget):
             v = dlg.valores()
             self.cliente.setText(" ".join(filter(None, [v["nombre"].strip(), v["apellidos"].strip()])))
             self.cliente_id = nuevo
-            self.info_cli.setText("Cliente creado y seleccionado")
+            self.datos_clientes[nuevo] = facturacion.validar_datos_fiscales(
+                {k: v[k] for k in facturacion.CAMPOS_FISCALES})
+            self._info_cliente("Cliente creado y seleccionado")
 
     # --------------------------------------------------------------- guardar
     def limpiar(self, preguntar: bool = False):
@@ -536,6 +559,7 @@ class MostradorView(QWidget):
         self.carrito.limpiar()
         self.descuento.clear()
         self.obs.clear()
+        self.factura.setChecked(False)
         self.elegir_entrega("mostrador")
         self._quitar_cliente()
         self.filtro.clear()
@@ -546,6 +570,11 @@ class MostradorView(QWidget):
     def guardar(self):
         if not self.carrito:
             QMessageBox.information(self, "Oceánica", "Agregue al menos un servicio a la orden.")
+            return
+        if self.factura.isChecked() and self.cliente_id is None:
+            QMessageBox.information(self, "Factura", "Para facturar, elija al cliente de la lista o dé de alta uno nuevo (F4).\n"
+                                    "Si no necesita factura, quite la marca «Requiere factura».")
+            self.cliente.setFocus()
             return
         if self.cliente.text().strip() and self.cliente_id is None:
             r = QMessageBox.question(self, "Cliente sin seleccionar",
@@ -576,7 +605,8 @@ class MostradorView(QWidget):
             return
         promesa = self.entrega.dateTime().toPython()
         ok, oid = seguro(self, ordenes.crear_orden, self.ctx.conn, sesion, self.carrito.items(), self.cliente_id,
-                         promesa, self.carrito.descuento, self.obs.text() or None, pago, entrega)
+                         promesa, self.carrito.descuento, self.obs.text() or None, pago, entrega,
+                         requiere_factura=self.factura.isChecked())
         if not ok:
             return
         orden = ordenes.obtener_orden(self.ctx.conn, oid)

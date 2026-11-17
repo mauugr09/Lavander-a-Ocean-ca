@@ -20,7 +20,7 @@ class ClientesView(QWidget):
         lay.setContentsMargins(16, 16, 16, 16)
         fila = QHBoxLayout()
         self.buscar = QLineEdit()
-        self.buscar.setPlaceholderText("Buscar por nombre o teléfono")
+        self.buscar.setPlaceholderText("Buscar por nombre, teléfono o RFC")
         en_buscador(self.buscar)
         self.b_nuevo = poner(QPushButton("Nuevo cliente"), "user-plus")
         self.b_nuevo.setProperty("rol", "primario")
@@ -29,8 +29,10 @@ class ClientesView(QWidget):
         fila.addWidget(self.b_nuevo)
         fila.addWidget(self.b_editar)
         lay.addLayout(fila)
-        self.tabla = crear_tabla(["Nombre", "Teléfono", "Correo", "Notas"])
+        self.tabla = crear_tabla(["Nombre", "Teléfono", "Correo", "RFC", "Notas"], estirar=4)
         lay.addWidget(self.tabla, 3)
+        self.lb_vacio = etiqueta("", "suave", True)
+        lay.addWidget(self.lb_vacio)
         lay.addWidget(etiqueta("Órdenes del cliente", "subtitulo"))
         self.hist = crear_tabla(["Folio", "Fecha", "Estado", "Total"], derecha=(3,), estirar=1)
         lay.addWidget(self.hist, 2)
@@ -50,7 +52,14 @@ class ClientesView(QWidget):
         filas = filas or []
         self.datos = {c["id"]: c for c in filas}
         poblar(self.tabla, [(c["id"], [" ".join(filter(None, [c["nombre"], c["apellidos"]])), c["telefono"] or "",
-                                       c["email"] or "", c["notas"] or ""]) for c in filas])
+                                       c["email"] or "", c["rfc"] or "", c["notas"] or ""]) for c in filas])
+        if filas:
+            self.lb_vacio.setText("")
+        elif self.buscar.text().strip():
+            self.lb_vacio.setText(f"Ningún cliente coincide con «{self.buscar.text().strip()}». "
+                                  "Revise cómo lo escribió o dé de alta al cliente con «Nuevo cliente».")
+        else:
+            self.lb_vacio.setText("Todavía no hay clientes. Dé de alta a sus clientes con «Nuevo cliente» o desde la captura de una orden (F4).")
         self._historial()
 
     def _historial(self):

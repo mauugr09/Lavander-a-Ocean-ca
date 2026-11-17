@@ -3,23 +3,28 @@ from __future__ import annotations
 
 from ..db import transaccion
 from .comunes import ErrorNegocio, auditar, escapar_like, requerir_rol, texto
+from .facturacion import CAMPOS_FISCALES, validar_datos_fiscales
 
 
-def crear_cliente(conn, sesion, nombre, apellidos=None, telefono=None, email=None, notas=None) -> int:
+def crear_cliente(conn, sesion, nombre, apellidos=None, telefono=None, email=None, notas=None, **fiscales) -> int:
+    """`fiscales` (opcionales): rfc, razon_social, regimen_fiscal, uso_cfdi, codigo_postal_fiscal."""
     requerir_rol(sesion, "administrador", "empleado")
-    datos = (
-        texto(nombre, "nombre", 80),
-        texto(apellidos, "apellidos", 80, False),
-        texto(telefono, "teléfono", 20, False),
-        texto(email, "correo", 120, False),
-        texto(notas, "notas", 300, False),
-    )
-    if datos[3] and "@" not in datos[3]:
+    desconocidos = set(fiscales) - set(CAMPOS_FISCALES)
+    if desconocidos:
+        raise ErrorNegocio(f"Campos no editables: {', '.join(sorted(desconocidos))}")
+    datos = {
+        "nombre": texto(nombre, "nombre", 80),
+        "apellidos": texto(apellidos, "apellidos", 80, False),
+        "telefono": texto(telefono, "teléfono", 20, False),
+        "email": texto(email, "correo", 120, False),
+        "notas": texto(notas, "notas", 300, False),
+        **validar_datos_fiscales(fiscales),
+    }
+    if datos["email"] and "@" not in datos["email"]:
         raise ErrorNegocio("El correo no es válido.")
     with transaccion(conn) as cur:
-        cur.execute(
-            "INSERT INTO clientes (nombre, apellidos, telefono, email, notas) VALUES (%s,%s,%s,%s,%s)", datos
-        )
+        cur.execute(f"INSERT INTO clientes ({', '.join(datos)}) VALUES ({', '.join(['%s'] * len(datos))})",
+                    tuple(datos.values()))
         nuevo = cur.lastrowid
         auditar(cur, sesion, "cliente_creado", "clientes", nuevo)
         return nuevo
@@ -28,12 +33,13 @@ def crear_cliente(conn, sesion, nombre, apellidos=None, telefono=None, email=Non
 def actualizar_cliente(conn, sesion, cliente_id: int, **cambios) -> None:
     requerir_rol(sesion, "administrador", "empleado")
     limites = {"nombre": 80, "apellidos": 80, "telefono": 20, "email": 120, "notas": 300}
-    desconocidos = set(cambios) - set(limites)
+    desconocidos = set(cambios) - set(limites) - set(CAMPOS_FISCALES)
     if desconocidos:
         raise ErrorNegocio(f"Campos no editables: {', '.join(sorted(desconocidos))}")
     if not cambios:
         return
-    valores = {c: texto(v, c, limites[c], obligatorio=(c == "nombre")) for c, v in cambios.items()}
+    valores = {c: texto(v, c, limites[c], obligatorio=(c == "nombre")) for c, v in cambios.items() if c in limites}
+    valores.update(validar_datos_fiscales({c: v for c, v in cambios.items() if c in CAMPOS_FISCALES}))
     if valores.get("email") and "@" not in valores["email"]:
         raise ErrorNegocio("El correo no es válido.")
     sets = ", ".join(f"{c} = %s" for c in valores)
@@ -63,15 +69,15 @@ def obtener_cliente(conn, cliente_id: int) -> dict:
 
 
 def buscar_clientes(conn, consulta: str = "", solo_activos: bool = True, limite: int = 50) -> list[dict]:
-    """Busca por nombre, apellidos o teléfono (coincidencia parcial)."""
+    """Busca por nombre, apellidos, teléfono o RFC (coincidencia parcial)."""
     partes = [p for p in (consulta or "").split() if p]
     where, params = [], []
     if solo_activos:
         where.append("activo = 1")
     for p in partes:
         patron = f"%{escapar_like(p)}%"
-        where.append("(nombre LIKE %s OR apellidos LIKE %s OR telefono LIKE %s)")
-        params += [patron, patron, patron]
+        where.append("(nombre LIKE %s OR apellidos LIKE %s OR telefono LIKE %s OR rfc LIKE %s)")
+        params += [patron] * 4
     sql = "SELECT * FROM clientes"
     if where:
         sql += " WHERE " + " AND ".join(where)

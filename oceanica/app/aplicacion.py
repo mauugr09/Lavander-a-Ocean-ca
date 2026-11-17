@@ -70,16 +70,24 @@ def main() -> int:
     _configurar_log()
     app = preparar_aplicacion()
     cfg = cargar_config()
-    try:
-        if not RUTA_CONFIG.exists() and not cfg.password:
-            raise FileNotFoundError("No existe config.ini")
-        conn = conectar(cfg)
-    except (mysql.connector.Error, FileNotFoundError) as e:
+    if not RUTA_CONFIG.exists() and not cfg.password:
+        # Primera vez en esta computadora: el mensaje es para quien instala, por eso sí lleva los comandos.
         QMessageBox.critical(None, "Oceánica Gestión",
-                             "No se pudo conectar con la base de datos.\n\n"
-                             "• Revise que el servicio de MariaDB/MySQL esté encendido.\n"
-                             "• Si es la primera vez: python -m oceanica.init_db (con root)\n  o, si la base ya existe: python -m oceanica.configurar\n\n"
-                             f"Detalle: {e}")
+                             "El sistema todavía no está instalado en esta computadora.\n\n"
+                             "• Primera vez: python -m oceanica.init_db (pide root una sola vez)\n"
+                             "• Si la base ya existe: python -m oceanica.configurar")
+        return 1
+    try:
+        conn = conectar(cfg)
+    except mysql.connector.Error:
+        # Sistema ya instalado que hoy no conecta: lo ve el empleado al abrir. El detalle técnico va al registro.
+        logging.getLogger("oceanica").exception("No se pudo conectar con la base de datos al iniciar")
+        QMessageBox.critical(None, "Oceánica Gestión",
+                             "No se pudo abrir el sistema porque la base de datos no responde.\n\n"
+                             "1. Cierre este aviso y reinicie la computadora.\n"
+                             "2. Vuelva a abrir Oceánica.\n\n"
+                             "Si sigue igual, avise a la encargada: el detalle quedó en la carpeta logs.\n"
+                             "Mientras tanto, anote las órdenes en papel.")
         return 1
     ctx = Contexto(conn, cfg)
     ventana = Ventana(ctx)

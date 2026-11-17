@@ -1,6 +1,7 @@
 """Tickets de orden y de corte, recibo de nómina e impresión en Windows."""
 from __future__ import annotations
 
+import logging
 import textwrap
 from decimal import Decimal
 from pathlib import Path
@@ -18,8 +19,11 @@ from .comunes import requerir_rol
 from .exportacion import formatear
 
 
+log = logging.getLogger("oceanica")
+
+
 class ErrorImpresion(Exception):
-    """No se pudo imprimir; el mensaje indica qué revisar."""
+    """No se pudo imprimir; el mensaje indica qué revisar (sin texto técnico: ese va al registro)."""
 
 
 # ---------- Formato de texto de ancho fijo -----------------------------------
@@ -127,6 +131,10 @@ def ticket_orden_texto(conn, orden_id: int) -> str:
         if marca:
             L.append("  " + marca.strip())
     L.append(_par("POR LIQUIDAR:", "$" + _dinero(o["saldo"]), ancho))
+    if o["facturada"]:
+        L.append("Factura: emitida" + (f" ({o['factura_folio']})" if o["factura_folio"] else ""))
+    elif o["requiere_factura"]:
+        L.append("Factura: solicitada")
     if o["observaciones"]:
         L += ["", *textwrap.wrap("Nota: " + o["observaciones"], ancho)]
     if o["estado"] == "cancelada":
@@ -283,8 +291,9 @@ def imprimir_texto(texto: str, impresora: str | None = None, logo: bytes = b"") 
     try:
         import win32print
     except ImportError:
-        raise ErrorImpresion("La impresión directa requiere Windows y el paquete pywin32 (pip install pywin32). "
-                             "Mientras tanto puede generar el PDF del ticket.")
+        log.warning("Impresión directa no disponible: falta pywin32 (o no es Windows)")
+        raise ErrorImpresion("Esta computadora no puede imprimir directo en la impresora de tickets. "
+                             "Puede abrir el PDF del ticket e imprimirlo desde ahí.")
     try:
         nombre = impresora or win32print.GetDefaultPrinter()
         datos = (b"\x1b@" + logo + b"\x1bt\x02" + texto.encode("cp850", errors="replace") + b"\n\n\n\n"
@@ -301,7 +310,9 @@ def imprimir_texto(texto: str, impresora: str | None = None, logo: bytes = b"") 
         finally:
             win32print.ClosePrinter(h)
     except Exception as e:  # pywintypes.error u otros del controlador
-        raise ErrorImpresion(f"No se pudo imprimir en '{impresora or 'la impresora predeterminada'}': {e}") from e
+        log.exception("Falló la impresión del ticket en %r", impresora)
+        raise ErrorImpresion(f"No se pudo imprimir en «{impresora or 'la impresora predeterminada'}». Revise que esté "
+                             "encendida, conectada y con papel. Si sigue igual, avise a la encargada.") from e
 
 
 def imprimir_ticket_orden(conn, orden_id: int) -> None:

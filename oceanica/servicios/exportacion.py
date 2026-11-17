@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from decimal import Decimal
+from html import escape
 from pathlib import Path
 
 import xlsxwriter
@@ -17,6 +18,7 @@ from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import LETTER, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
@@ -215,11 +217,34 @@ def _tiles_pdf(reporte, ancho, E):
     return t
 
 
+def _anchos_columnas(cols, textos: list[list[str]], ancho: float, pesos: list[float]) -> list[float]:
+    """Ninguna columna queda más angosta que su palabra más larga (un folio, un RFC o un monto no se parten ni se
+    enciman); lo que sobra se reparte según `pesos`. Si ni así cabe, se aprieta todo parejo."""
+    relleno = 13  # 6 pt por lado más un margen
+
+    def palabra_mas_larga(t: str, negrita: bool, partir: bool) -> float:
+        fuente = "Helvetica-Bold" if negrita else "Helvetica"
+        piezas = t.split() if partir else [t]
+        return max((stringWidth(p, fuente, 8.5) for p in piezas), default=0)
+
+    minimo = []
+    for j, (_, _, tipo) in enumerate(cols):
+        partir = tipo == "texto"  # solo el texto se parte en renglones; fechas y montos van en una línea
+        minimo.append(max(palabra_mas_larga(f[j], i == 0 or i == len(textos) - 1, partir or i == 0)
+                          for i, f in enumerate(textos)) + relleno)
+    sobra = ancho - sum(minimo)
+    if sobra <= 0:
+        return [m * ancho / sum(minimo) for m in minimo]
+    return [m + sobra * p / sum(pesos) for m, p in zip(minimo, pesos)]
+
+
 def _tabla_pdf(reporte, ancho, E):
     cols = reporte["columnas"]
     pesos = [3.0 if c[2] == "texto" else 2.0 if c[2] == "fechahora" else 1.6 for c in cols]
-    anchos = [ancho * p / sum(pesos) for p in pesos]
-    datos = [[Paragraph(c[1], E["enc_der"] if c[2] in ("dinero", "numero") else E["enc"]) for c in cols]]
+    textos = [[c[1] for c in cols]] + [[formatear(f.get(c[0]), c[2]) for c in cols] for f in reporte["filas"]]
+    totales_txt = _fila_totales(reporte)
+    anchos = _anchos_columnas(cols, textos + ([totales_txt] if totales_txt else []), ancho, pesos)
+    datos = [[Paragraph(escape(c[1]), E["enc_der"] if c[2] in ("dinero", "numero") else E["enc"]) for c in cols]]
     tenues = []
     for i, fila in enumerate(reporte["filas"], start=1):
         renglon = []
@@ -228,7 +253,7 @@ def _tabla_pdf(reporte, ancho, E):
             texto = formatear(v, tipo)
             if tipo in ("dinero", "numero") and v is not None and Decimal(v) == 0:
                 tenues.append((j, i))
-            renglon.append(Paragraph(texto, E["celda"]) if tipo == "texto" else texto)
+            renglon.append(Paragraph(escape(texto), E["celda"]) if tipo == "texto" else texto)
         datos.append(renglon)
     totales = _fila_totales(reporte)
     if totales:
