@@ -59,10 +59,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libxcb-cursor0 mariadb-client
+      - name: Cliente de MariaDB sin TLS (el servidor de pruebas no lo ofrece y el cliente nuevo lo exige)
+        run: printf '[client]\nskip-ssl\n' > ~/.my.cnf
       - name: Dependencias de Python
         run: pip install -r requirements.txt
       - name: Versión del servidor
-        run: mysql -h 127.0.0.1 -uroot -praiz_de_pruebas -e "SELECT VERSION()"
+        run: |
+          mysql --version
+          mysql -h 127.0.0.1 -uroot -praiz_de_pruebas -e "SELECT VERSION()"
       - name: Pruebas
         # -rs lista las pruebas omitidas: una omisión por falta de base o de mysqldump no debe pasar inadvertida
         run: python -m pytest -q -rs tests
