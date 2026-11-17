@@ -128,6 +128,35 @@ def restaurar(archivo: Path, cfg: ConfigDB | None = None) -> None:
         raise RuntimeError("La restauración falló: " + proc.stderr.decode("utf-8", "replace")[:300])
 
 
+def estado(conn, ahora: datetime | None = None, carpeta: Path = CARPETA_RESPALDOS) -> dict:
+    """Qué tan protegido está el negocio hoy, para avisarle al administrador.
+
+    Devuelve {'nivel': 'ok' | 'aviso' | 'alerta', 'mensaje', 'ultimo': datetime | None, 'dias': int | None}.
+    alerta: nunca se ha respaldado, el último tiene más de un día, o su archivo ya no está en la carpeta.
+    aviso: hay respaldo reciente pero no se copió al disco externo (si la laptop falla, se pierde con ella)."""
+    ahora = ahora or datetime.now()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT archivo, creado_en, copiado_a_externo FROM respaldos ORDER BY creado_en DESC, id DESC LIMIT 1")
+        fila = cur.fetchone()
+    finally:
+        cur.close()
+        conn.commit()
+    if not fila:
+        return {"nivel": "alerta", "mensaje": "Nunca se ha hecho un respaldo", "ultimo": None, "dias": None}
+    archivo, creado, externo = (fila["archivo"], fila["creado_en"], fila["copiado_a_externo"]) if isinstance(fila, dict) else fila
+    dias = max(0, (ahora.date() - creado.date()).days)
+    hace = "hoy" if dias == 0 else ("ayer" if dias == 1 else f"hace {dias} días")
+    base = {"ultimo": creado, "dias": dias}
+    if ahora - creado > timedelta(hours=36):
+        return {**base, "nivel": "alerta", "mensaje": f"Último respaldo: {hace}"}
+    if not (carpeta / archivo).exists():
+        return {**base, "nivel": "alerta", "mensaje": f"El respaldo de {hace} ya no está en la carpeta"}
+    if not externo:
+        return {**base, "nivel": "aviso", "mensaje": f"Respaldo de {hace}, sin copia en disco externo"}
+    return {**base, "nivel": "ok", "mensaje": f"Respaldo de {hace}, con copia externa"}
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Respaldos de Oceánica Gestión")
     g = p.add_mutually_exclusive_group(required=True)

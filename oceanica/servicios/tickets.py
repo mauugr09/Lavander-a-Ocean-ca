@@ -15,7 +15,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from ..config import CARPETA_PROGRAMA
 from . import caja, configuracion, nomina, ordenes
-from .comunes import requerir_rol
+from .comunes import ErrorNegocio, requerir_rol
 from .exportacion import formatear
 
 
@@ -182,6 +182,34 @@ def ticket_corte_texto(conn, corte_id: int) -> str:
               _par("DIFERENCIA", _dinero(c["diferencia"]), ancho)]
     if c["observaciones"]:
         L += textwrap.wrap("Obs: " + c["observaciones"], ancho)
+    return "\n".join(L) + "\n"
+
+
+def etiquetas_bolsa_texto(conn, orden_id: int, bolsas: int) -> str:
+    """Una etiqueta por bolsa o paquete de la orden, para pegarla y no confundir la ropa de dos clientes.
+    Solo texto (folio, cliente, «bolsa 1 de 3», fecha de entrega): no lleva código de barras."""
+    try:
+        bolsas = int(bolsas)
+    except (TypeError, ValueError):
+        raise ErrorNegocio("Escriba cuántas bolsas son.")
+    if not 1 <= bolsas <= 30:
+        raise ErrorNegocio("El número de bolsas debe estar entre 1 y 30.")
+    ancho = _ancho(conn)
+    o = ordenes.obtener_orden(conn, orden_id)
+    cli = o["cliente"]
+    nombre = " ".join(filter(None, [cli["nombre"], cli["apellidos"]])) if cli else "MOSTRADOR"
+    sep = "=" * ancho
+    L: list[str] = []
+    for n in range(1, bolsas + 1):
+        L += [sep, *_centrado(o["folio"], ancho), *_centrado(nombre.upper()[:ancho], ancho)]
+        if cli and cli["telefono"]:
+            L += _centrado(f"Tel. {cli['telefono']}", ancho)
+        L += [*_centrado(f"BOLSA {n} DE {bolsas}", ancho), *_centrado(f"Entrega: {_fecha(o['fecha_promesa'])}", ancho)]
+        if o.get("tipo_entrega") == "domicilio":
+            L += _centrado("A DOMICILIO", ancho)
+        if Decimal(o["saldo"]) > 0:
+            L += _centrado(f"POR COBRAR ${_dinero(o['saldo'])}", ancho)
+        L += [sep, "", ""]
     return "\n".join(L) + "\n"
 
 

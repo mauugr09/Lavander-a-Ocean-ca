@@ -5,11 +5,12 @@ from datetime import datetime
 from decimal import Decimal
 from html import escape
 
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton, QTextBrowser,
                                QVBoxLayout, QWidget)
 
-from ..servicios import caja, configuracion, facturacion, ordenes, tickets
+from ..servicios import avisos, caja, configuracion, facturacion, ordenes, tickets
 from . import tema
 from .cobro import CobroDialog
 from .dialogos import TicketDialog
@@ -73,10 +74,17 @@ class OrdenesView(QWidget):
         self.b_cancelar.setProperty("rol", "peligro")
         f2.addWidget(self.b_entregar, 1)
         f2.addWidget(self.b_ticket)
-        f2.addWidget(self.b_factura)
         f2.addWidget(self.b_cancelar)
         dl.addLayout(f2)
-        for b in (self.b_avanzar, self.b_cobrar, self.b_entregar, self.b_ticket, self.b_cancelar):
+        f3 = QHBoxLayout()
+        self.b_avisar = QPushButton("Avisar por WhatsApp")
+        self.b_etiquetas = poner(QPushButton("Etiquetas de bolsa"), "tag")
+        f3.addWidget(self.b_avisar, 1)
+        f3.addWidget(self.b_etiquetas)
+        f3.addWidget(self.b_factura)
+        dl.addLayout(f3)
+        for b in (self.b_avanzar, self.b_cobrar, self.b_entregar, self.b_ticket, self.b_cancelar, self.b_avisar,
+                  self.b_etiquetas):
             b.setMinimumHeight(52)
         self.b_entregar.setStyleSheet("font-size: 13pt;")
         self.buscar.setMinimumHeight(44)
@@ -94,6 +102,8 @@ class OrdenesView(QWidget):
         self.b_ticket.clicked.connect(self.ver_ticket)
         self.b_factura.clicked.connect(self.factura)
         self.b_cancelar.clicked.connect(self.cancelar)
+        self.b_avisar.clicked.connect(self.avisar)
+        self.b_etiquetas.clicked.connect(self.etiquetas)
         QShortcut(QKeySequence("F3"), self, activated=self.buscar.setFocus)
         QShortcut(QKeySequence("F6"), self, activated=self.cobrar)
         QShortcut(QKeySequence("F7"), self, activated=self.entregar)
@@ -180,6 +190,9 @@ class OrdenesView(QWidget):
                      f"{escape(p['metodo'])}{marca}</small><br>")
         if o.get("observaciones"):
             h.append(f"<p>Nota: {escape(o['observaciones'])}</p>")
+        if o["estado"] == "lista":
+            h.append(f"<p style='color:{tema.OK}'>Se le avisó por WhatsApp el {fecha_hora(o['avisado_en'])}</p>" if o.get("avisado_en")
+                     else "<p>Todavía no se le avisa al cliente que está lista</p>")
         if o["facturada"]:
             h.append(f"<p style='color:{tema.OK}'>Facturada" + (f" · folio {escape(o['factura_folio'])}" if o["factura_folio"] else "")
                      + f" · {fecha_hora(o['facturada_en'])} ({escape(o['facturo'] or '')})</p>")
@@ -202,6 +215,8 @@ class OrdenesView(QWidget):
         self.b_entregar.setEnabled(abierta)
         self.b_cancelar.setEnabled(abierta)
         self.b_ticket.setEnabled(bool(o))
+        self.b_etiquetas.setEnabled(abierta)
+        self.b_avisar.setEnabled(bool(o) and o["estado"] == "lista" and bool(o["cliente"]) and bool(o["cliente"]["telefono"]))
         self.b_factura.setEnabled(bool(o) and (o["estado"] != "cancelada" or bool(o["facturada"])))
 
     # ------------------------------------------------------------- acciones
@@ -390,6 +405,41 @@ class OrdenesView(QWidget):
             ok, _ = seguro(self, facturacion.marcar_requiere_factura, self.ctx.conn, sesion, o["id"], elegido is b_pedir)
         if ok:
             self._tras_cambio()
+
+    def avisar(self):
+        """Abre WhatsApp con el mensaje ya escrito; el empleado lo envía. Aquí solo se anota que se avisó."""
+        if not self.orden:
+            return
+        oid = self.orden["id"]
+        ok, aviso = seguro(self, avisos.aviso_orden_lista, self.ctx.conn, oid)
+        if not ok:
+            return
+        if aviso["avisado_en"] and QMessageBox.question(
+                self, "Ya se le avisó", f"A este cliente ya se le avisó el {fecha_hora(aviso['avisado_en'])}.\n\n"
+                "¿Avisarle otra vez?") != QMessageBox.Yes:
+            return
+        sesion = self.ctx.identificar(self, sensible=False)
+        if not sesion:
+            return
+        if not QDesktopServices.openUrl(QUrl(aviso["enlace"])):
+            QMessageBox.warning(self, "WhatsApp", "No se pudo abrir WhatsApp. Revise que haya internet y un navegador.")
+            return
+        if QMessageBox.question(self, "WhatsApp", "Se abrió WhatsApp con el mensaje escrito.\n\n"
+                                "¿Ya lo envió? (Si no se envió, responda No para que no quede anotado.)") != QMessageBox.Yes:
+            return
+        if seguro(self, avisos.registrar_aviso, self.ctx.conn, sesion, oid)[0]:
+            self._mostrar_detalle()
+
+    def etiquetas(self):
+        if not self.orden:
+            return
+        n, ok = QInputDialog.getInt(self, "Etiquetas de bolsa", "¿Cuántas bolsas o paquetes son?", 1, 1, 30)
+        if not ok:
+            return
+        ok, texto = seguro(self, tickets.etiquetas_bolsa_texto, self.ctx.conn, self.orden["id"], n)
+        if ok:
+            TicketDialog(self, texto, f"{self.orden['folio']}-etiquetas.pdf", f"Etiquetas {self.orden['folio']}",
+                         imprimir=lambda: tickets.imprimir_texto(texto, configuracion.obtener(self.ctx.conn, "impresora_ticket") or None)).exec()
 
     def ver_ticket(self):
         if self.orden:

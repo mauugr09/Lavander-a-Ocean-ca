@@ -38,6 +38,8 @@ class ConfigView(QWidget):
         fila.addStretch(1)
         fila.addWidget(self.b_respaldo)
         lay.addLayout(fila)
+        self.lb_respaldo = etiqueta("", "suave", True)
+        lay.addWidget(self.lb_respaldo)
         self.tabla = crear_tabla(["Ajuste", "Valor"], estirar=0)
         lay.addWidget(self.tabla, 1)
         self.b_editar.clicked.connect(self.editar)
@@ -45,6 +47,12 @@ class ConfigView(QWidget):
         self.b_respaldo.clicked.connect(self.respaldar)
 
     def al_mostrar(self):
+        e = respaldos.estado(self.ctx.conn)
+        self.lb_respaldo.setText(e["mensaje"] + ("" if e["nivel"] == "ok" else
+                                 ".  Conecte el disco externo y pulse «Hacer respaldo ahora»."))
+        self.lb_respaldo.setProperty("rol", "suave" if e["nivel"] == "ok" else "error")
+        self.lb_respaldo.style().unpolish(self.lb_respaldo)
+        self.lb_respaldo.style().polish(self.lb_respaldo)
         ok, filas = seguro(self, configuracion.listar, self.ctx.conn)
         self.filas = {f["clave"]: f for f in filas or []}
         poblar(self.tabla, [(f["clave"], [f["descripcion"] or f["clave"], _resumen(f["valor"])]) for f in self.filas.values()])
@@ -73,3 +81,4 @@ class ConfigView(QWidget):
             QMessageBox.critical(self, "Respaldo", f"No se pudo crear el respaldo:\n{e}")
             return
         QMessageBox.information(self, "Respaldo", f"Respaldo creado:\n{ruta}")
+        self.al_mostrar()

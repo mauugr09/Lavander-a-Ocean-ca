@@ -6,6 +6,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMainWindow, QPushButton, QStackedWidget,
                                QVBoxLayout, QWidget)
 
+from .. import respaldos
 from ..servicios import caja, configuracion
 from .iconos import icono
 from .login import LoginView, logo
@@ -137,7 +138,9 @@ class Ventana(QMainWindow):
         chip(self.chip_modo, f"Administrador: {sesion_admin['usuario']}" if sesion_admin else "Modo mostrador", "chip_neutro")
         b_salir = QPushButton("Salir")
         b_salir.clicked.connect(self.cerrar_sesion)
-        for w in (self.chip_caja, self.chip_modo, b_salir):
+        self.chip_respaldo = QLabel()
+        self.chip_respaldo.setVisible(False)
+        for w in (self.chip_respaldo, self.chip_caja, self.chip_modo, b_salir):
             bl.addWidget(w)
         der.addWidget(barra)
         self.contenido = QStackedWidget()
@@ -176,6 +179,11 @@ class Ventana(QMainWindow):
             else:
                 chip(self.chip_caja, "Caja cerrada", "chip_alerta")
             if self.ctx.es_admin:
+                e = respaldos.estado(self.ctx.conn)   # solo la encargada puede hacer algo con este aviso
+                chip(self.chip_respaldo, e["mensaje"], {"ok": "chip_ok", "aviso": "chip_neutro"}.get(e["nivel"], "chip_alerta"))
+                self.chip_respaldo.setToolTip("Los respaldos se hacen en Configuración → «Hacer respaldo ahora» "
+                                              "o con la tarea programada diaria.")
+                self.chip_respaldo.setVisible(True)
                 n = len(caja.listar_transferencias_pendientes(self.ctx.conn, self.ctx.admin))
                 for i, p in enumerate(self.paginas):
                     if p.titulo == "Transferencias":

@@ -211,11 +211,18 @@ def movimientos_corte(conn, corte_id: int) -> list[dict]:
 
 
 def cerrar_corte(conn, sesion, efectivo_contado, observaciones=None) -> dict:
+    """Cierra la caja con el efectivo contado.
+
+    Corte a ciegas: si el conteo no coincide y no hay explicación, se rechaza. Al empleado NO se le dice
+    cuánto esperaba el sistema ni de cuánto es la diferencia (si lo supiera, bastaría con escribir ese
+    número y quedarse con el sobrante); al administrador sí. Cada conteo rechazado queda en la bitácora,
+    para que se note si alguien prueba varios montos hasta atinar."""
     requerir_rol(sesion, "administrador", "empleado")
     contado = dinero(efectivo_contado, "efectivo contado")
     if contado < 0:
         raise ErrorNegocio("El efectivo contado no puede ser negativo.")
     observaciones = texto(observaciones, "observaciones", 200, False)
+    rechazado = None
     with transaccion(conn) as cur:
         corte = corte_abierto_cur(cur, bloquear=True)
         if not corte:
@@ -223,19 +230,37 @@ def cerrar_corte(conn, sesion, efectivo_contado, observaciones=None) -> dict:
         resumen = resumen_corte_cur(cur, corte["id"])
         diferencia = contado - resumen["efectivo_esperado"]
         if diferencia != 0 and not observaciones:
-            raise ErrorNegocio(
-                f"Hay una diferencia de ${diferencia} contra lo esperado "
-                f"(${resumen['efectivo_esperado']}). Anota una observación para cerrar."
+            rechazado = (corte["id"], resumen["efectivo_esperado"], diferencia)
+        else:
+            cur.execute(
+                "UPDATE cortes_caja SET estado='cerrado', cerrada_en=NOW(), usuario_cierre_id=%s, "
+                "efectivo_esperado=%s, efectivo_contado=%s, diferencia=%s, observaciones=%s WHERE id=%s",
+                (sesion["id"], resumen["efectivo_esperado"], contado, diferencia, observaciones, corte["id"]),
             )
-        cur.execute(
-            "UPDATE cortes_caja SET estado='cerrado', cerrada_en=NOW(), usuario_cierre_id=%s, "
-            "efectivo_esperado=%s, efectivo_contado=%s, diferencia=%s, observaciones=%s WHERE id=%s",
-            (sesion["id"], resumen["efectivo_esperado"], contado, diferencia, observaciones, corte["id"]),
-        )
-        auditar(cur, sesion, "caja_cerrada", "cortes_caja", corte["id"], f"diferencia ${diferencia}")
-        resumen["efectivo_contado"] = contado
-        resumen["diferencia"] = diferencia
-        return resumen
+            auditar(cur, sesion, "caja_cerrada", "cortes_caja", corte["id"], f"diferencia ${diferencia}")
+            resumen["efectivo_contado"] = contado
+            resumen["diferencia"] = diferencia
+            return resumen
+    # El rechazo se anota en su propia transacción: un error dentro de la anterior la habría deshecho.
+    corte_id, esperado, diferencia = rechazado
+    with transaccion(conn) as cur:
+        auditar(cur, sesion, "caja_conteo_rechazado", "cortes_caja", corte_id,
+                f"contó ${contado}, esperado ${esperado}, diferencia ${diferencia}")
+    if es_admin(sesion):
+        raise ErrorNegocio(f"Hay una diferencia de ${diferencia} contra lo esperado (${esperado}). "
+                           "Anote una observación para cerrar.")
+    raise ErrorNegocio("Hay una diferencia entre el efectivo contado y lo que registró el sistema. "
+                       "Vuelva a contar; si el conteo es correcto, explique la diferencia para cerrar.")
+
+
+def conteos_rechazados(conn, sesion, corte_id: int) -> list[dict]:
+    """Conteos que no coincidieron al intentar cerrar ese corte (solo administrador)."""
+    requerir_rol(sesion, "administrador")
+    with transaccion(conn) as cur:
+        cur.execute("SELECT a.creado_en, u.usuario, a.detalle FROM auditoria a LEFT JOIN usuarios u ON u.id = a.usuario_id "
+                    "WHERE a.accion = 'caja_conteo_rechazado' AND a.tabla = 'cortes_caja' AND a.registro_id = %s "
+                    "ORDER BY a.id", (corte_id,))
+        return cur.fetchall()
 
 
 def listar_cortes(conn, desde=None, hasta=None, limite: int = 100) -> list[dict]:

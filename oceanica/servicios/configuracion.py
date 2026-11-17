@@ -8,7 +8,7 @@ from .comunes import ErrorNegocio, auditar, requerir_rol, texto
 _NUMERICAS = {
     "dias_entrega_default", "hora_entrada_tolerancia_min", "respaldo_retencion_dias",
     "descuento_max_pct_empleado", "nomina_jornada_horas", "nomina_factor_hora_extra", "ticket_ancho",
-    "nomina_salario_minimo_diario", "nomina_pago_hora_extra",
+    "nomina_salario_minimo_diario", "nomina_pago_hora_extra", "almacenaje_dias",
 }
 _TEXTOS_LARGOS = {"ticket_condiciones", "ticket_almacenaje"}
 _SI_NO = {"entrega_requiere_pago_total", "asistencia_paga_justificada", "horas_extra_automaticas", "ticket_logo"}
