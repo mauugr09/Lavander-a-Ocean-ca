@@ -1,0 +1,127 @@
+# Pruebas en las dos versiones de MariaDB que importan y construcción del programa para Windows.
+#   - pruebas:  toda la suite contra MariaDB 10.3 (la rama del servidor del negocio) y 10.11 (la recomendada).
+#   - windows:  genera Oceanica.exe / OceanicaAdmin.exe y el instalador, comprueba que arrancan y los deja
+#               como archivos descargables de la ejecución (pestaña Actions -> la ejecución -> Artifacts).
+# No prueba la impresora ni la PC del local: eso sigue siendo una verificación en sitio.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: Pruebas (MariaDB ${{ matrix.mariadb }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mariadb: ["10.3", "10.11"]
+    services:
+      mariadb:
+        image: mariadb:${{ matrix.mariadb }}
+        env:
+          MYSQL_ROOT_PASSWORD: raiz_de_pruebas
+          MYSQL_DATABASE: oceanica_test
+          MYSQL_USER: oc_test
+          MYSQL_PASSWORD: oc_test_pw
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -praiz_de_pruebas --silent"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      QT_QPA_PLATFORM: offscreen
+      OCEANICA_TEST_DB_HOST: 127.0.0.1
+      OCEANICA_TEST_DB_PORT: "3306"
+      OCEANICA_TEST_DB_USER: oc_test
+      OCEANICA_TEST_DB_PASSWORD: oc_test_pw
+      OCEANICA_TEST_DB_NAME: oceanica_test
+      OCEANICA_TEST_ROOT_PASSWORD: raiz_de_pruebas
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Librerías de Qt y cliente de MariaDB (mysqldump para las pruebas de respaldo)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libxcb-cursor0 mariadb-client
+      - name: Cliente de MariaDB sin TLS (el servidor de pruebas no lo ofrece y el cliente nuevo lo exige)
+        run: printf '[client]\nskip-ssl\n' > ~/.my.cnf
+      - name: Dependencias de Python
+        run: pip install -r requirements.txt
+      - name: Versión del servidor
+        run: |
+          mysql --version
+          mysql -h 127.0.0.1 -uroot -praiz_de_pruebas -e "SELECT VERSION()"
+      - name: Pruebas
+        # -rs lista las pruebas omitidas: una omisión por falta de base o de mysqldump no debe pasar inadvertida
+        run: python -m pytest -q -rs tests
+
+  windows:
+    name: Programa para Windows (.exe e instalador)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Dependencias y PyInstaller
+        run: pip install -r requirements.txt pyinstaller
+      - name: Construir Oceanica.exe y OceanicaAdmin.exe
+        run: pyinstaller oceanica.spec --noconfirm --clean
+      - name: El programa de consola arranca (importa configuración, base y respaldos)
+        shell: pwsh
+        run: |
+          $salida = & dist\Oceanica\OceanicaAdmin.exe respaldo --help
+          if ($LASTEXITCODE -ne 0) { throw "OceanicaAdmin.exe terminó con código $LASTEXITCODE" }
+          $salida
+          if (-not ($salida -match "--restaurar")) { throw "La ayuda de respaldos no es la esperada" }
+      - name: La ventana arranca y sigue abierta (sin base configurada muestra su aviso, no se cae)
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          OCEANICA_HOME: ${{ runner.temp }}\oceanica_datos
+        run: |
+          $p = Start-Process -FilePath dist\Oceanica\Oceanica.exe -PassThru
+          Start-Sleep -Seconds 12
+          $registro = "$env:OCEANICA_HOME\logs\oceanica.log"
+          if (Test-Path $registro) { Get-Content $registro -Tail 20 }
+          if ($p.HasExited) { throw "Oceanica.exe se cerró solo con código $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force
+      - name: Instalador (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc instalador.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup falló con código $LASTEXITCODE" }
+      - name: Guardar el instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Instalar_Oceanica
+          path: dist/Instalar_Oceanica.exe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Guardar la carpeta del programa (sin instalador)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Oceanica_carpeta
+          path: dist/Oceanica
+          if-no-files-found: error
+          retention-days: 14
