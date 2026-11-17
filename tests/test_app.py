@@ -749,3 +749,29 @@ def test_reporte_ancho_no_corta_columnas(qapp, conn, admin):
     vista.selector.setCurrentText("Ventas por día")
     assert h.sectionResizeMode(0) == QHeaderView.Stretch
     vista.close()
+
+
+def test_al_abrir_sin_base_el_aviso_es_para_el_empleado(qapp, monkeypatch, tmp_path):
+    """Sistema ya instalado que un día no conecta: el aviso no lleva comandos ni códigos; el detalle va al log."""
+    import mysql.connector
+    from oceanica.app import aplicacion
+    from oceanica.config import ConfigDB
+    vistos = []
+    monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: vistos.append(a[2]))
+    monkeypatch.setattr(aplicacion, "_configurar_log", lambda: None)
+    monkeypatch.setattr(aplicacion, "cargar_config", lambda: ConfigDB(host="127.0.0.1", usuario="x", password="y", base="z"))
+
+    def sin_servidor(cfg):
+        raise mysql.connector.InterfaceError(msg="Can't connect to MySQL server on '127.0.0.1:3306' (10061)", errno=2003)
+    monkeypatch.setattr(aplicacion, "conectar", sin_servidor)
+    assert aplicacion.main() == 1
+    aviso = vistos[-1]
+    assert "reinicie la computadora" in aviso and "encargada" in aviso
+    assert not any(t in aviso for t in ("python", "root", "2003", "10061", "MySQL server", "init_db"))
+
+    # primera vez (sin configuración): ahí sí van las instrucciones de instalación
+    config = tmp_path / "config.ini"
+    monkeypatch.setattr(aplicacion, "RUTA_CONFIG", config)
+    monkeypatch.setattr(aplicacion, "cargar_config", lambda: ConfigDB(host="127.0.0.1", usuario="x", password="", base="z"))
+    monkeypatch.setattr(aplicacion, "conectar", lambda cfg: pytest.fail("sin configuración no debe intentar conectar"))
+    assert aplicacion.main() == 1 and "oceanica.init_db" in vistos[-1]

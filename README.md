@@ -37,7 +37,7 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 | `oceanica/app/` | Interfaz PySide6: entrada, mostrador, órdenes, caja, asistencia, clientes, inventario y, para el administrador, panel, reportes, nómina, servicios y precios, empleados, transferencias y configuración |
 | `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG y animación de la entrada |
 | `oceanica/app/recursos/` | Logo, ícono e íconos de línea (Tabler Icons, licencia MIT) |
-| `tests/` | 162 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
+| `tests/` | 165 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
 
 ## Notas de actualización
 
@@ -53,6 +53,11 @@ Después: `python -m oceanica.migrar` (o `OceanicaAdmin.exe migrar`). Solo aplic
   `ordenes` «requiere factura», «facturada», folio externo, fecha y quién la marcó. No cambian datos existentes. Cada
   una es una sola sentencia `ALTER TABLE`: si falla, no deja la tabla a medias y se puede volver a correr.
 - Todas probadas en MariaDB 10.3.9 y 10.11, incluida la actualización de una base con datos.
+- **Instalador (`init_db`)**: el usuario del sistema ahora se crea para `localhost`, `127.0.0.1` y `::1` (nunca para la
+  red). Antes solo se creaba para `localhost`, y un servidor con `skip-name-resolve` rechazaba al programa con
+  «Access denied» (comprobado en 10.3.9 y 10.11). Si en una computadora ya instalada aparece ese error, vuelva a
+  correr `python -m oceanica.init_db`: conserva los datos y solo renueva el usuario y su contraseña.
+- Si la base no responde al abrir el programa, el aviso al empleado ya no muestra comandos ni códigos de error.
 
 ## Instalación en la PC del local
 
@@ -158,7 +163,7 @@ En una base de pruebas: `python -m oceanica.datos_demo`. Crea servicios con prec
 
 ## Pruebas
 
-`python -m pytest`. Necesitan un servidor MySQL/MariaDB con un usuario de pruebas (variables `OCEANICA_TEST_DB_HOST/PORT/USER/PASSWORD/NAME`; por defecto `oc_test` / `oc_test_pw` / `oceanica_test` en 127.0.0.1:3306).
+`python -m pytest`. Necesitan un servidor MySQL/MariaDB con un usuario de pruebas (variables `OCEANICA_TEST_DB_HOST/PORT/USER/PASSWORD/NAME`; por defecto `oc_test` / `oc_test_pw` / `oceanica_test` en 127.0.0.1:3306). La prueba del instalador necesita además `OCEANICA_TEST_ROOT_PASSWORD` (root de ese servidor desechable); sin ella se omite.
 **Borran las tablas de esa base: nunca apuntarlas a la base real.** Sin servidor, se omiten.
 
 ## Límites conocidos
