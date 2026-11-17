@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from PySide6.QtCore import QUrl, Qt
+from PySide6.QtCore import QUrl
 from PySide6.QtGui import QColor, QDesktopServices
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox,
                                QPushButton, QRadioButton, QVBoxLayout, QWidget)
@@ -17,9 +17,9 @@ from .util import a_decimal, chip, crear_tabla, dinero, etiqueta, id_seleccionad
 
 CONCEPTOS = [("Bono", "BONO"), ("Otra percepción", "OTRAPERC"), ("Descuento manual", "DESCMAN")]
 ESTADO_PERIODO = {"abierto": "Abierta", "aprobado": "Aprobada", "cerrado": "Cerrada"}
-PASOS = {"abierto": "Paso 1: calcula la semana y revisa los avisos.  Paso 2: aprueba cuando todo esté bien.",
+PASOS = {"abierto": "Paso 1: calcule la semana y revise los avisos.  Paso 2: apruebe cuando todo esté bien.",
          "aprobado": "Paso 3: paga a cada empleado y márcalo.  Paso 4: cuando todos estén pagados, cierra la semana.",
-         "cerrado": "Semana cerrada: ya no se puede modificar. Aún puedes imprimir recibos."}
+         "cerrado": "Semana cerrada: ya no se puede modificar. Aún puede imprimir recibos."}
 
 
 def _fmt(d: date) -> str:
@@ -50,7 +50,7 @@ class ConceptoDialog(QDialog):
     def _validar(self):
         m = a_decimal(self.monto.text())
         if m is None or m <= 0 or not self.descripcion.text().strip():
-            QMessageBox.warning(self, "Oceánica", "Escribe un monto mayor que cero y el motivo.")
+            QMessageBox.warning(self, "Oceánica", "Escriba un monto mayor que cero y el motivo.")
             return
         self.accept()
 
@@ -173,7 +173,7 @@ class NominaView(QWidget):
             poblar(self.tabla, [])
             poblar(self.detalle, [])
             chip(self.chip_estado, "Sin semanas", "chip_neutro")
-            self.lb_pasos.setText("Todavía no hay semanas. Pulsa «Abrir semana…» para empezar.")
+            self.lb_pasos.setText("Todavía no hay semanas. Pulse «Abrir semana…» para empezar.")
             self.lb_total.setText("")
             self._botones()
             return
@@ -228,7 +228,7 @@ class NominaView(QWidget):
                     f"Semana pasada ({_fmt(lunes_actual - timedelta(days=7))} al {_fmt(lunes_actual - timedelta(days=1))})":
                         hoy - timedelta(days=7)}
         from PySide6.QtWidgets import QInputDialog
-        texto, ok = QInputDialog.getItem(self, "Abrir semana", "¿Qué semana quieres pagar?", list(opciones), 1, False)
+        texto, ok = QInputDialog.getItem(self, "Abrir semana", "¿Qué semana desea pagar?", list(opciones), 1, False)
         if not ok:
             return
         # al abrir la primera semana se da de alta el sueldo mínimo a quien no tenga sueldo
@@ -245,12 +245,12 @@ class NominaView(QWidget):
             return
         self.cargar()
         if r["advertencias"]:
-            QMessageBox.information(self, "Revisa antes de aprobar",
+            QMessageBox.information(self, "Revise antes de aprobar",
                                     "Estos avisos no detienen el cálculo, pero conviene revisarlos:\n\n• " + "\n• ".join(r["advertencias"]))
 
     def aprobar(self):
         if self.periodo and QMessageBox.question(
-                self, "Aprobar semana", "Al aprobar ya no se podrán cambiar los montos (puedes reabrir mientras no pagues a nadie).\n\n¿Aprobar?") == QMessageBox.Yes:
+                self, "Aprobar semana", "Al aprobar ya no se podrán cambiar los montos (puede reabrir mientras no se le pague a nadie).\n\n¿Aprobar?") == QMessageBox.Yes:
             if seguro(self, nomina.aprobar_periodo, self.ctx.conn, self.ctx.admin, self.periodo["id"])[0]:
                 self.recargar_lista(self.periodo["id"])
 
@@ -273,7 +273,7 @@ class NominaView(QWidget):
             self.cargar()
             if not dlg.firmado.isChecked():
                 QMessageBox.information(self, "Recibo", "Pago registrado. Imprime el recibo y pídele que lo firme; "
-                                        "luego usa «Marcar recibo firmado».")
+                                        "luego use «Marcar recibo firmado».")
 
     def recibo(self):
         n = self.nominas.get(id_seleccionado(self.tabla))
@@ -301,7 +301,7 @@ class NominaView(QWidget):
     def quitar_concepto(self):
         did = id_seleccionado(self.detalle)
         if did is None:
-            QMessageBox.information(self, "Oceánica", "Selecciona el concepto que quieres quitar (solo los capturados a mano).")
+            QMessageBox.information(self, "Oceánica", "Seleccione el concepto que desea quitar (solo los capturados a mano).")
             return
         if seguro(self, nomina.quitar_concepto, self.ctx.conn, self.ctx.admin, did)[0]:
             self.cargar()

@@ -73,7 +73,7 @@ def _leer(ruta) -> list[dict]:
             dialecto = csv.excel
         filas = list(csv.reader(texto.splitlines(), dialecto))
     else:
-        raise ErrorNegocio("Formato no soportado: usa .csv o .xlsx")
+        raise ErrorNegocio("Formato no soportado: use .csv o .xlsx")
     filas = [r for r in filas if any(str(c).strip() for c in r if c is not None)]
     if len(filas) < 2:
         raise ErrorNegocio("El archivo no tiene datos (solo encabezado o vacío).")
@@ -118,7 +118,7 @@ def _fecha(v) -> date:
             return datetime.strptime(s, fmt).date()
         except ValueError:
             pass
-    raise ValueError(f"fecha inválida '{v}' (usa AAAA-MM-DD o DD/MM/AAAA)")
+    raise ValueError(f"fecha inválida '{v}' (use AAAA-MM-DD o DD/MM/AAAA)")
 
 
 def _largo(valor: str, campo: str, maximo: int, obligatorio=True) -> str | None:

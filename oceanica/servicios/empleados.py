@@ -61,7 +61,7 @@ def dar_de_baja(conn, sesion, empleado_id: int, fecha_baja) -> None:
             "WHERE u.empleado_id = %s", (empleado_id,))
         for u in cur.fetchall():
             if u["id"] == sesion["id"]:
-                raise ErrorNegocio("No puedes dar de baja al empleado ligado a tu propio usuario.")
+                raise ErrorNegocio("No puede dar de baja al empleado ligado a su propio usuario.")
             if u["rol"] == "administrador" and u["activo"]:
                 cur.execute(
                     "SELECT COUNT(*) AS n FROM usuarios u JOIN roles r ON r.id = u.rol_id "
@@ -244,7 +244,7 @@ def marcar_estado(conn, sesion, empleado_id: int, fecha, estado: str, observacio
                     (empleado_id, fecha))
         a = cur.fetchone()
         if a and a["hora_entrada"]:
-            raise ErrorNegocio("Ese día ya tiene entrada registrada. Usa corregir_asistencia.")
+            raise ErrorNegocio("Ese día ya tiene entrada registrada. Use «Corregir horas».")
         if a:
             cur.execute("UPDATE asistencias SET estado=%s, observaciones=%s, registrado_por=%s WHERE id=%s",
                         (estado, observaciones, sesion["id"], a["id"]))

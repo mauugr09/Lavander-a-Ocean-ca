@@ -20,6 +20,10 @@ Interfaz, mensajes, código de dominio y documentación en español de México.
   `ALTER TABLE` por migración** (en InnoDB se aplica completa o no se aplica) en lugar de `ADD COLUMN IF NOT EXISTS`,
   que es solo de MariaDB y rompería la compatibilidad con MySQL 8 que promete el README.
 - **Nunca edites una migración ya aplicada**: crea la siguiente. El sistema se niega a migrar si cambió el checksum.
+- **Numeración de migraciones**: antes de crear una, actualiza la rama con `main` (`git pull`) y usa el siguiente número
+  libre. Dos ramas con el mismo número no se pueden juntar sin renumerar (pasó con la 007 y la 008). Solo se renumera
+  una migración que nunca se aplicó en la base del cliente.
+- **Mensajes en «usted»**: la interfaz trata al empleado de usted («Elija», «Revise»).
 - **Pruebas obligatorias**: cada regla nueva lleva pruebas de servicio con base real (no mocks de la base) y, si toca
   una pantalla, una prueba de flujo con Qt en `QT_QPA_PLATFORM=offscreen`. Los diálogos modales se parchean; una prueba
   que se cuelga por un diálogo sin parchar es un error de la prueba. Corre toda la suite antes de dar algo por terminado,

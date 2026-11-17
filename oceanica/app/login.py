@@ -4,12 +4,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QStyle, QStyleOption,
+                               QVBoxLayout, QWidget)
 
+from .burbujas import Burbujas
+from .iconos import poner
 from ..seguridad import ErrorAcceso, iniciar_sesion
 from ..servicios import usuarios
-from ..servicios.comunes import ErrorNegocio
 from .util import etiqueta, seguro, tarjeta
 
 RECURSOS = Path(__file__).parent / "recursos"
@@ -27,6 +29,7 @@ class LoginView(QWidget):
         super().__init__()
         self.setObjectName("fondo")
         self.ctx = ctx
+        self.burbujas = Burbujas(self)
         raiz = QHBoxLayout(self)
         raiz.addStretch(1)
         col = QVBoxLayout()
@@ -44,15 +47,16 @@ class LoginView(QWidget):
         col.addSpacing(18)
 
         card = tarjeta()
-        card.setFixedWidth(400)
+        card.setFixedWidth(460)
         cl = QVBoxLayout(card)
         cl.setContentsMargins(22, 22, 22, 22)
         cl.setSpacing(10)
-        self.b_mostrador = QPushButton("Entrar al mostrador")
+        self.b_mostrador = poner(QPushButton("Entrar al mostrador"), "cash-register", "white", 26)
         self.b_mostrador.setProperty("rol", "primario")
-        self.b_mostrador.setMinimumHeight(46)
+        self.b_mostrador.setMinimumHeight(64)
+        self.b_mostrador.setStyleSheet("font-size: 15pt;")
         cl.addWidget(self.b_mostrador)
-        cl.addWidget(etiqueta("Cada cobro, orden o entrega se firma con el PIN de quien la hace.", "suave", True))
+        cl.addWidget(etiqueta("Para empleados. Cada orden, cobro o entrega se confirma con el PIN de quien la realiza.", "suave", True))
         cl.addSpacing(10)
         cl.addWidget(etiqueta("Administrador", "subtitulo"))
         self.usuario = QLineEdit()
@@ -73,6 +77,23 @@ class LoginView(QWidget):
         self.b_admin.clicked.connect(self._admin)
         self.usuario.returnPressed.connect(self.password.setFocus)
         self.password.returnPressed.connect(self._admin)
+
+    # ---- burbujas del fondo
+    def paintEvent(self, e):
+        p = QPainter(self)
+        op = QStyleOption()
+        op.initFrom(self)
+        self.style().drawPrimitive(QStyle.PE_Widget, op, p, self)  # fondo de la hoja de estilos
+        self.burbujas.pintar(p)
+        p.end()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self.burbujas.iniciar()
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        self.burbujas.detener()
 
     def al_mostrar(self):
         self.lb_nombre.setText(self.ctx.nombre_negocio or "Oceánica")

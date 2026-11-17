@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
+from .iconos import en_buscador, poner
 from ..servicios import clientes
 from .dialogos import ClienteDialog
 from .util import ESTADOS, crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, poblar, seguro
@@ -20,9 +21,10 @@ class ClientesView(QWidget):
         fila = QHBoxLayout()
         self.buscar = QLineEdit()
         self.buscar.setPlaceholderText("Buscar por nombre, teléfono o RFC")
-        self.b_nuevo = QPushButton("Nuevo cliente")
+        en_buscador(self.buscar)
+        self.b_nuevo = poner(QPushButton("Nuevo cliente"), "user-plus")
         self.b_nuevo.setProperty("rol", "primario")
-        self.b_editar = QPushButton("Editar")
+        self.b_editar = poner(QPushButton("Editar datos"), "pencil")
         fila.addWidget(self.buscar, 1)
         fila.addWidget(self.b_nuevo)
         fila.addWidget(self.b_editar)
@@ -55,9 +57,9 @@ class ClientesView(QWidget):
             self.lb_vacio.setText("")
         elif self.buscar.text().strip():
             self.lb_vacio.setText(f"Ningún cliente coincide con «{self.buscar.text().strip()}». "
-                                  "Revisa cómo lo escribiste o dalo de alta con «Nuevo cliente».")
+                                  "Revise cómo lo escribió o dé de alta al cliente con «Nuevo cliente».")
         else:
-            self.lb_vacio.setText("Todavía no hay clientes. Dalos de alta con «Nuevo cliente» o desde la captura de una orden (F4).")
+            self.lb_vacio.setText("Todavía no hay clientes. Dé de alta a sus clientes con «Nuevo cliente» o desde la captura de una orden (F4).")
         self._historial()
 
     def _historial(self):

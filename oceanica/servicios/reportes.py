@@ -4,7 +4,7 @@ con tipo en: texto, dinero, numero, fecha, fechahora. Ese formato lo consumen la
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from ..db import transaccion
@@ -49,6 +49,74 @@ def ventas_por_dia(conn, desde, hasta) -> dict:
             ("vendido", "Vendido", "dinero"), ("cobrado", "Cobrado", "dinero")]
     r = _reporte("Ventas por día", cols, filas, f"Del {d} al {h}", ("ordenes", "vendido", "cobrado"))
     return r
+
+
+_MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+          "noviembre", "diciembre"]
+
+
+def _ventas_agrupadas(conn, d: date, h: date, clave_de) -> dict:
+    """Órdenes y vendido por fecha de recepción, cobrado por fecha de pago, sumados según clave_de(fecha)."""
+    grupos: dict = {}
+
+    def grupo(fecha):
+        return grupos.setdefault(clave_de(fecha), {"ordenes": 0, "vendido": CERO, "cobrado": CERO})
+
+    for f in _consulta(conn, "SELECT DATE(fecha_recepcion) AS fecha, COUNT(*) AS n, SUM(total) AS v FROM ordenes "
+                             "WHERE estado <> 'cancelada' AND DATE(fecha_recepcion) BETWEEN %s AND %s "
+                             "GROUP BY DATE(fecha_recepcion)", (d, h)):
+        g = grupo(f["fecha"])
+        g["ordenes"] += int(f["n"])
+        g["vendido"] += Decimal(f["v"])
+    for f in _consulta(conn, "SELECT fecha, SUM(total_cobrado) AS t FROM v_ventas_diarias WHERE fecha BETWEEN %s AND %s "
+                             "GROUP BY fecha", (d, h)):
+        grupo(f["fecha"])["cobrado"] += Decimal(f["t"])
+    return grupos
+
+
+def _cols_agrupadas(primera: tuple) -> list:
+    return [primera, ("ordenes", "Órdenes", "numero"), ("vendido", "Vendido", "dinero"),
+            ("promedio", "Promedio por orden", "dinero"), ("cobrado", "Cobrado", "dinero")]
+
+
+def _promedio(vendido: Decimal, ordenes: int) -> Decimal:
+    return (vendido / ordenes).quantize(Decimal("0.01")) if ordenes else CERO
+
+
+def _con_promedio(r: dict) -> dict:
+    """El total de «Promedio por orden» es el promedio de todo el periodo, no una suma."""
+    t = r["totales"]
+    t["promedio"] = _promedio(t["vendido"], int(t["ordenes"]))
+    return r
+
+
+def ventas_por_semana(conn, desde, hasta) -> dict:
+    """Semanas de lunes a domingo: órdenes, vendido, promedio por orden y cobrado."""
+    d, h = _rango(desde, hasta)
+    grupos = _ventas_agrupadas(conn, d, h, lambda f: f - timedelta(days=f.weekday()))
+    filas = []
+    for lunes in sorted(grupos):
+        domingo = lunes + timedelta(days=6)
+        if lunes.month == domingo.month:
+            texto = f"Del {lunes.day} al {domingo.day} de {_MESES[lunes.month - 1]} {lunes.year}"
+        else:
+            texto = f"Del {lunes.day} de {_MESES[lunes.month - 1]} al {domingo.day} de {_MESES[domingo.month - 1]} {domingo.year}"
+        g = grupos[lunes]
+        filas.append({"semana": texto, **g, "promedio": _promedio(g["vendido"], g["ordenes"])})
+    return _con_promedio(_reporte("Ventas por semana", _cols_agrupadas(("semana", "Semana (lunes a domingo)", "texto")),
+                                  filas, f"Del {d} al {h}", ("ordenes", "vendido", "cobrado")))
+
+
+def ventas_por_mes(conn, desde, hasta) -> dict:
+    """Meses: órdenes, vendido, promedio por orden y cobrado."""
+    d, h = _rango(desde, hasta)
+    grupos = _ventas_agrupadas(conn, d, h, lambda f: (f.year, f.month))
+    filas = []
+    for (anio, mes) in sorted(grupos):
+        g = grupos[(anio, mes)]
+        filas.append({"mes": f"{_MESES[mes - 1].capitalize()} {anio}", **g, "promedio": _promedio(g["vendido"], g["ordenes"])})
+    return _con_promedio(_reporte("Ventas por mes", _cols_agrupadas(("mes", "Mes", "texto")), filas, f"Del {d} al {h}",
+                                  ("ordenes", "vendido", "cobrado")))
 
 
 def cobros_por_metodo(conn, desde, hasta) -> dict:

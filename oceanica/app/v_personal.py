@@ -71,7 +71,7 @@ class HorarioDialog(QDialog):
         self.setWindowTitle(f"Horario de {nombre}")
         self.setMinimumWidth(460)
         lay = QVBoxLayout(self)
-        lay.addWidget(etiqueta("Marca los días que trabaja. Los demás son su descanso (no cuentan como falta).", "suave", True))
+        lay.addWidget(etiqueta("Marque los días que trabaja. Los demás son su descanso (no cuentan como falta).", "suave", True))
         rejilla = QGridLayout()
         self.filas: list[tuple[QCheckBox, QTimeEdit, QTimeEdit]] = []
         for i, dia in enumerate(DIAS):
@@ -175,7 +175,7 @@ class PersonalView(QWidget):
         eid = id_seleccionado(self.tabla)
         u = self.por_id.get(eid, {}).get("usuario") if eid else None
         if not u:
-            QMessageBox.information(self, "Oceánica", "Selecciona un empleado con usuario.")
+            QMessageBox.information(self, "Oceánica", "Seleccione un empleado con usuario.")
             return
         pin, ok = QInputDialog.getText(self, "PIN nuevo", "PIN de 4 a 6 dígitos:", QLineEdit.Password, pin_aleatorio())
         if ok and seguro(self, usuarios.asignar_pin, self.ctx.conn, self.ctx.admin, u["id"], pin)[0]:
@@ -185,7 +185,7 @@ class PersonalView(QWidget):
     def horario(self):
         eid = id_seleccionado(self.tabla)
         if eid is None or not self.por_id[eid]["empleado"]["activo"]:
-            QMessageBox.information(self, "Oceánica", "Selecciona un empleado activo.")
+            QMessageBox.information(self, "Oceánica", "Seleccione un empleado activo.")
             return
         e = self.por_id[eid]["empleado"]
         actuales = {t["dia_semana"]: (t["hora_entrada"].strftime("%H:%M"), t["hora_salida"].strftime("%H:%M"))

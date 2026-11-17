@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import re
 import sys
 from contextlib import contextmanager
@@ -11,6 +12,9 @@ from typing import Iterator
 import mysql.connector
 
 from .config import CARPETA_MIGRACIONES, ConfigDB, cargar_config
+
+# La extensión de C del conector no existe en algunas plataformas (por ejemplo, Python para Windows ARM64).
+_HAY_EXTENSION_C = importlib.util.find_spec("_mysql_connector") is not None
 
 
 def conectar(cfg: ConfigDB | None = None):
@@ -28,7 +32,8 @@ def conectar(cfg: ConfigDB | None = None):
         time_zone="SYSTEM",
         # En el ejecutable empaquetado se usa la implementación en Python del conector: la de C necesita
         # los plugins de autenticación del sistema (mysql_native_password.so/.dll), que no se incluyen.
-        use_pure=bool(getattr(sys, "frozen", False)),
+        # También se usa si la extensión de C no está instalada (por ejemplo, Python para Windows ARM64).
+        use_pure=bool(getattr(sys, "frozen", False)) or not _HAY_EXTENSION_C,
     )
     return conn
 

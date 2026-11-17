@@ -61,29 +61,30 @@ def test_regimen_uso_y_codigo_postal():
 
 # ---------- Migraciones -----------------------------------------------------------------
 
-def test_actualizar_base_con_datos_desde_la_006(_base, tmp_path):
-    """La base del cliente ya tiene datos: 007 y 008 se aplican sobre ella sin perder nada."""
+def test_actualizar_base_con_datos_desde_la_009(_base, tmp_path):
+    """La base del cliente ya tiene datos: 010 y 011 se aplican sobre ella sin perder nada."""
     from tests.conftest import _vaciar_todo
     conn = _base
     _vaciar_todo(conn)
     for version, _, ruta in listar_migraciones():
-        if version <= 6:
+        if version <= 9:
             shutil.copy(ruta, tmp_path / ruta.name)
     try:
-        assert aplicar_migraciones(conn, tmp_path) == [1, 2, 3, 4, 5, 6]
+        assert aplicar_migraciones(conn, tmp_path) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
         cur = conn.cursor()
         cur.execute("INSERT INTO usuarios (rol_id, usuario, password_hash) VALUES (1, 'viejo', 'x')")
         uid = cur.lastrowid
         cur.execute("INSERT INTO clientes (nombre, telefono) VALUES ('Cliente previo', '5550001111')")
         cid = cur.lastrowid
-        cur.execute("INSERT INTO ordenes (folio, cliente_id, usuario_id, total) VALUES ('OC-000001', %s, %s, 90)", (cid, uid))
+        cur.execute("INSERT INTO ordenes (folio, cliente_id, usuario_id, total, tipo_entrega, cargo_domicilio, "
+                    "direccion_entrega) VALUES ('OC-000001', %s, %s, 90, 'domicilio', 20, 'Calle 1')", (cid, uid))
         conn.commit()
     finally:
-        assert aplicar_migraciones(conn, CARPETA_MIGRACIONES)[:2] == [7, 8]  # deja la base completa pase lo que pase
+        assert aplicar_migraciones(conn, CARPETA_MIGRACIONES)[:2] == [10, 11]  # deja la base completa pase lo que pase
     cur.execute("SELECT nombre, rfc, razon_social FROM clientes")
     assert cur.fetchall() == [("Cliente previo", None, None)]
-    cur.execute("SELECT folio, total, requiere_factura, facturada, factura_folio FROM ordenes")
-    assert cur.fetchall() == [("OC-000001", D("90.00"), 0, 0, None)]
+    cur.execute("SELECT folio, total, tipo_entrega, cargo_domicilio, requiere_factura, facturada, factura_folio FROM ordenes")
+    assert cur.fetchall() == [("OC-000001", D("90.00"), "domicilio", D("20.00"), 0, 0, None)]
     assert aplicar_migraciones(conn) == []  # volver a migrar no hace nada
     cur.close()
 
@@ -208,9 +209,11 @@ def test_reporte_por_facturar_y_excel(conn, admin, empleado, servicio, tmp_path)
     destino = exportacion.exportar(r, tmp_path / "por_facturar.xlsx", "Lavandería Oceánica")
     from openpyxl import load_workbook
     ws = load_workbook(destino).active
-    encabezados = [c.value for c in ws[4]]
-    assert "RFC" in encabezados and "Razón social" in encabezados
-    valores = {ws.cell(row=i, column=encabezados.index("RFC") + 1).value for i in range(5, 7)}
+    fila_enc = next(r for r in range(1, 40) if any(c.value == "RFC" for c in ws[r]))   # el diseño pone logo y resumen arriba
+    encabezados = [c.value for c in ws[fila_enc]]
+    assert "Razón social" in encabezados and "Datos fiscales" in encabezados
+    col = encabezados.index("RFC") + 1
+    valores = {ws.cell(row=i, column=col).value for i in (fila_enc + 1, fila_enc + 2)}
     assert valores == {"ABC010203XY1", "TAL0102037A1"}
 
 
@@ -219,15 +222,24 @@ def test_reporte_por_facturar_vacio(conn, admin):
     assert r["filas"] == [] and r["totales"]["total"] == 0
 
 
-def test_pdf_de_muchas_columnas_cabe_sin_partir_palabras():
+def test_pdf_ancho_sin_encimar_y_con_ampersand(conn, admin, empleado, servicio, tmp_path):
+    """El reporte de 14 columnas cabe en la hoja sin partir folios, RFC ni montos, y un «&» (válido en el RFC y en
+    nombres como «Taller R&M») no rompe el PDF."""
     from reportlab.pdfbase.pdfmetrics import stringWidth
-    datos = [["Folio", "Recibida", "Periodo", "Cliente", "RFC", "Razón social", "Régimen", "Uso CFDI", "C.P.", "Correo",
-              "Datos fiscales", "Total", "Pagado", "Saldo"],                # como el reporte de órdenes por facturar
-             ["OC-000123", "03/11/2026 10:05", "Del periodo", "Hotel del Lago Zumpango", "ABC010203XY1",
-              "HOTEL DEL LAGO DE ZUMPANGO", "601", "G03", "54960", "facturacion@hoteldellago.com.mx",
-              "Falta: razón social, régimen fiscal", "$1,250.00", "$1,250.00", "$0.00"]]
-    anchos = exportacion._anchos_que_caben(datos, 700, 7)
-    assert anchos and sum(anchos) <= 700.01
-    for j, w in enumerate(anchos):                                   # ningún folio ni RFC se corta a la mitad
-        assert w >= max(stringWidth(p, "Helvetica", 7) for p in datos[1][j].split()) + 12
-    assert exportacion._anchos_que_caben([["Fecha", "Total"], ["01/11/2026", "$10.00"]], 700, 7) is None
+    cid = clientes.crear_cliente(conn, empleado, "Taller R&M", email="facturas@tallerryemecanica.com.mx",
+                                 **{**FISCALES, "rfc": "R&M010203XY1", "razon_social": "TALLER R&M <NORTE>"})
+    _orden(conn, empleado, servicio, cid)
+    r = reportes.por_facturar(conn, admin, date.today().replace(day=1), date.today())
+    destino = exportacion.exportar(r, tmp_path / "por_facturar.pdf", "Lavandería Oceánica")
+    assert destino.stat().st_size > 1000
+    tabla = exportacion._tabla_pdf(r, 700, exportacion._estilos())
+    celdas = {c.getPlainText() if hasattr(c, "getPlainText") else str(c) for fila in tabla._cellvalues for c in fila}
+    assert {"R&M010203XY1", "TALLER R&M <NORTE>", "Taller R&M"} <= celdas   # sin escapar salía «TALLER R&M;»
+
+    cols = r["columnas"]
+    textos = [[c[1] for c in cols]] + [[exportacion.formatear(f.get(c[0]), c[2]) for c in cols] for f in r["filas"]]
+    anchos = exportacion._anchos_columnas(cols, textos, 700, [1.0] * len(cols))
+    assert abs(sum(anchos) - 700) < 0.01
+    for j, (clave, _, tipo) in enumerate(cols):
+        if clave in ("folio", "rfc", "total", "fecha_recepcion"):
+            assert anchos[j] >= stringWidth(textos[1][j], "Helvetica", 8.5), clave   # no se parte ni se encima

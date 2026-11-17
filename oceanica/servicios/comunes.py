@@ -53,7 +53,7 @@ def como_fecha(valor, campo: str = "fecha") -> date:
 
 def requerir_rol(sesion: dict, *roles: str) -> None:
     if not sesion or sesion.get("rol") not in roles:
-        raise ErrorAcceso("No tienes permiso para esta acción.")
+        raise ErrorAcceso("No tiene permiso para esta acción.")
 
 
 def es_admin(sesion: dict) -> bool:

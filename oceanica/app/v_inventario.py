@@ -32,7 +32,7 @@ class InsumoDialog(QDialog):
         self.proveedor.addItem("(sin proveedor)", None)
         for p in proveedores:
             self.proveedor.addItem(p["nombre"], p["id"])
-        for etiq, w in (("Categoría (escribe una nueva si hace falta)", self.categoria), ("Nombre", self.nombre),
+        for etiq, w in (("Categoría (escriba una nueva si hace falta)", self.categoria), ("Nombre", self.nombre),
                         ("Unidad", self.unidad), ("Existencia actual", self.existencia), ("Mínimo (avisa debajo de esto)", self.minimo),
                         ("Costo por unidad $", self.costo), ("Proveedor", self.proveedor)):
             form.addRow(etiq, w)
@@ -44,7 +44,7 @@ class InsumoDialog(QDialog):
 
     def _validar(self):
         if not self.categoria.currentText().strip() or not self.nombre.text().strip():
-            QMessageBox.warning(self, "Oceánica", "Escribe la categoría y el nombre.")
+            QMessageBox.warning(self, "Oceánica", "Escriba la categoría y el nombre.")
             return
         for w in (self.existencia, self.minimo, self.costo):
             v = a_decimal(w.text())
@@ -78,10 +78,10 @@ class MovimientoDialog(QDialog):
 
     def _validar(self):
         if a_decimal(self.cantidad.text()) is None:
-            QMessageBox.warning(self, "Oceánica", "Escribe una cantidad válida.")
+            QMessageBox.warning(self, "Oceánica", "Escriba una cantidad válida.")
             return
         if self.obligatorio and not self.motivo.text().strip():
-            QMessageBox.warning(self, "Oceánica", "Escribe el motivo.")
+            QMessageBox.warning(self, "Oceánica", "Escriba el motivo.")
             return
         self.accept()
 
@@ -147,7 +147,7 @@ class InventarioView(QWidget):
     def _actual(self) -> dict | None:
         i = id_seleccionado(self.tabla)
         if i is None:
-            QMessageBox.information(self, "Oceánica", "Selecciona un insumo de la lista.")
+            QMessageBox.information(self, "Oceánica", "Seleccione un insumo de la lista.")
             return None
         return self.filas[i]
 
@@ -176,7 +176,7 @@ class InventarioView(QWidget):
         dlg = MovimientoDialog(self, titulo, pide_costo=tipo == "entrada")
         if not dlg.exec():
             return
-        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirma con tu PIN")
+        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirme con su PIN")
         if not sesion:
             return
         ok, _ = seguro(self, inventario.registrar_movimiento, self.ctx.conn, sesion, i["id"], tipo, a_decimal(dlg.cantidad.text()),

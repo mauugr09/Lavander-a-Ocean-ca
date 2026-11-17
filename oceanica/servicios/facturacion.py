@@ -84,7 +84,7 @@ def normalizar_rfc(valor) -> str | None:
     m = _RFC.match(rfc)
     if not m or not _fecha_valida(int(m.group(2)), int(m.group(3)), int(m.group(4))):
         raise ErrorNegocio("El RFC no tiene un formato válido: 12 caracteres para empresa (ej. ABC010203XY1) "
-                           "o 13 para persona física (ej. ABCD010203XY1). Revísalo en la constancia fiscal.")
+                           "o 13 para persona física (ej. ABCD010203XY1). Revíselo en la constancia fiscal.")
     return rfc
 
 
@@ -99,12 +99,12 @@ def validar_datos_fiscales(datos: dict) -> dict:
     if "regimen_fiscal" in datos:
         r = (datos["regimen_fiscal"] or "").strip() or None
         if r and r not in REGIMENES:
-            raise ErrorNegocio("Elige el régimen fiscal de la lista (está en la constancia de situación fiscal).")
+            raise ErrorNegocio("Elija el régimen fiscal de la lista (está en la constancia de situación fiscal).")
         v["regimen_fiscal"] = r
     if "uso_cfdi" in datos:
         u = (datos["uso_cfdi"] or "").strip().upper() or None
         if u and u not in USOS_CFDI:
-            raise ErrorNegocio("Elige el uso del CFDI de la lista.")
+            raise ErrorNegocio("Elija el uso del CFDI de la lista.")
         v["uso_cfdi"] = u
     if "codigo_postal_fiscal" in datos:
         cp = (datos["codigo_postal_fiscal"] or "").strip() or None
@@ -160,9 +160,9 @@ def marcar_facturada(conn, sesion, orden_id: int, folio_externo: str | None = No
         if o["estado"] == "cancelada":
             raise ErrorNegocio("La orden está cancelada: no se puede marcar como facturada.")
         if o["cliente_id"] is None:
-            raise ErrorNegocio("La orden no tiene cliente: asígnale uno antes de marcarla como facturada.")
+            raise ErrorNegocio("La orden no tiene cliente: asígnele uno antes de marcarla como facturada.")
         if o["facturada"]:
-            raise ErrorNegocio(f"La orden ya está marcada como facturada"
+            raise ErrorNegocio("La orden ya está marcada como facturada"
                                + (f" (folio {o['factura_folio']})." if o["factura_folio"] else "."))
         cur.execute("UPDATE ordenes SET requiere_factura = 1, facturada = 1, factura_folio = %s, facturada_en = NOW(), "
                     "facturada_por = %s WHERE id = %s", (folio_externo, sesion["id"], orden_id))

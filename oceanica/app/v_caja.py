@@ -1,11 +1,10 @@
 """Caja: apertura, movimientos, corte y cierre."""
 from __future__ import annotations
 
-from decimal import Decimal
 
-from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget)
 
+from .iconos import poner
 from ..servicios import caja, tickets
 from .dialogos import TicketDialog
 from .util import a_decimal, crear_tabla, dinero, etiqueta, fecha_hora, poblar, seguro, tarjeta
@@ -30,12 +29,14 @@ class CajaView(QWidget):
         pc = QVBoxLayout(self.p_cerrada)
         pc.setContentsMargins(16, 16, 16, 16)
         pc.addWidget(etiqueta("No hay caja abierta", "subtitulo"))
-        pc.addWidget(etiqueta("Cuenta el efectivo del cajón y captúralo como fondo inicial para poder cobrar.", "suave", True))
+        pc.addWidget(etiqueta("Cuente el efectivo del cajón y escríbalo como fondo inicial para poder cobrar.", "suave", True))
         fila = QHBoxLayout()
         self.fondo = QLineEdit("0.00")
-        self.fondo.setMaximumWidth(160)
-        self.b_abrir = QPushButton("Abrir caja")
+        self.fondo.setMaximumWidth(200)
+        self.b_abrir = poner(QPushButton("Abrir caja"), "lock-open", "white")
         self.b_abrir.setProperty("rol", "primario")
+        self.b_abrir.setMinimumHeight(52)
+        self.fondo.setMinimumHeight(44)
         fila.addWidget(etiqueta("Fondo inicial $"))
         fila.addWidget(self.fondo)
         fila.addWidget(self.b_abrir)
@@ -51,13 +52,15 @@ class CajaView(QWidget):
         pa.addWidget(self.lb_estado)
         self.tabla_res = crear_tabla(["Concepto", "Monto"], derecha=(1,))
         pa.addWidget(self.tabla_res)
-        pa.addWidget(etiqueta("Movimientos del corte", "subtitulo"))
+        pa.addWidget(etiqueta("Movimientos de la caja", "subtitulo"))
         self.tabla_mov = crear_tabla(["Hora", "Tipo", "Concepto", "Monto", "Quién"], derecha=(3,), estirar=2)
         pa.addWidget(self.tabla_mov, 1)
         fb = QHBoxLayout()
-        self.b_mov = QPushButton("Registrar gasto / ingreso / retiro")
-        self.b_cerrar = QPushButton("Cerrar caja")
+        self.b_mov = poner(QPushButton("Registrar gasto, ingreso o retiro"), "plus")
+        self.b_cerrar = poner(QPushButton("Cerrar caja (corte del día)"), "lock", "white")
         self.b_cerrar.setProperty("rol", "primario")
+        for b in (self.b_mov, self.b_cerrar):
+            b.setMinimumHeight(52)
         fb.addWidget(self.b_mov)
         fb.addStretch(1)
         fb.addWidget(self.b_cerrar)
@@ -88,7 +91,7 @@ class CajaView(QWidget):
         if pend["cantidad"]:
             filas.append(("p", [f"Transferencias por confirmar ({pend['cantidad']})", dinero(pend["total"])]))
         poblar(self.tabla_res, filas)
-        self.tabla_res.setFixedHeight(40 + 34 * len(filas))
+        self.tabla_res.setFixedHeight(48 + 42 * len(filas))
         movs = caja.movimientos_corte(self.ctx.conn, corte["id"])
         poblar(self.tabla_mov, [(m["id"], [m["creado_en"].strftime("%H:%M"), TIPOS[m["tipo"]].split(" (")[0], m["concepto"],
                                           dinero(m["monto"]), m["usuario"]]) for m in movs])
@@ -96,9 +99,9 @@ class CajaView(QWidget):
     def abrir(self):
         fondo = a_decimal(self.fondo.text())
         if fondo is None or fondo < 0:
-            QMessageBox.warning(self, "Oceánica", "Escribe un fondo inicial válido (puede ser 0).")
+            QMessageBox.warning(self, "Oceánica", "Escriba un fondo inicial válido (puede ser 0).")
             return
-        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirma con tu PIN para abrir la caja")
+        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirme con su PIN para abrir la caja")
         if not sesion:
             return
         ok, _ = seguro(self, caja.abrir_corte, self.ctx.conn, sesion, fondo)
@@ -120,9 +123,9 @@ class CajaView(QWidget):
             return
         m = a_decimal(monto)
         if m is None or m <= 0:
-            QMessageBox.warning(self, "Oceánica", "Escribe un monto mayor que cero.")
+            QMessageBox.warning(self, "Oceánica", "Escriba un monto mayor que cero.")
             return
-        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirma con tu PIN")
+        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirme con su PIN")
         if not sesion:
             return
         ok, _ = seguro(self, caja.registrar_movimiento, self.ctx.conn, sesion, tipo, concepto, m)
@@ -130,14 +133,14 @@ class CajaView(QWidget):
             self.al_mostrar()
 
     def cerrar(self):
-        texto, ok = QInputDialog.getText(self, "Cerrar caja", "Cuenta el efectivo del cajón y escribe cuánto hay $:")
+        texto, ok = QInputDialog.getText(self, "Cerrar caja", "Cuente el efectivo del cajón y escriba cuánto hay $:")
         if not ok:
             return
         contado = a_decimal(texto)
         if contado is None or contado < 0:
-            QMessageBox.warning(self, "Oceánica", "Escribe un monto válido.")
+            QMessageBox.warning(self, "Oceánica", "Escriba un monto válido.")
             return
-        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirma con tu PIN para cerrar la caja")
+        sesion = self.ctx.identificar(self, sensible=True, titulo="Confirme con su PIN para cerrar la caja")
         if not sesion:
             return
         obs = None
@@ -147,7 +150,7 @@ class CajaView(QWidget):
             if ok or r != "diferencia":
                 break
             obs, ok2 = QInputDialog.getText(self, "Hay diferencia", "El efectivo no coincide con lo esperado.\n"
-                                            "Explica la diferencia para poder cerrar:")
+                                            "Explique la diferencia para poder cerrar:")
             if not ok2 or not obs.strip():
                 return
         if ok and isinstance(r, dict):

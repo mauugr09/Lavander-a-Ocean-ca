@@ -105,11 +105,15 @@ def test_costo_de_nomina_solo_admin(conn, admin, empleado, negocio):
 def test_exportar_excel_con_totales(conn, negocio, tmp_path):
     rep = reportes.ventas_por_servicio(conn, HOY, HOY)
     ruta = exportacion.exportar(rep, tmp_path / "ventas.xlsx", "Lavandería Oceánica")
-    hoja = load_workbook(ruta).active
+    hoja = load_workbook(ruta, data_only=True).active
     filas = list(hoja.iter_rows(values_only=True))
-    assert filas[0][0] == "Lavandería Oceánica - Ventas por servicio"
-    assert filas[3][0] == "Servicio" and filas[-1][0] == "TOTAL"
-    assert filas[-1][4] == pytest.approx(354.0)
+    textos = [v for f in filas for v in f if isinstance(v, str)]
+    assert "Lavandería Oceánica" in textos and "Ventas por servicio" in textos
+    assert any(t.startswith("Cómo leer este reporte") for t in textos)
+    enc = next(i for i, f in enumerate(filas) if f[0] == "Servicio")       # tabla con encabezados
+    assert filas[-1][0] == "TOTAL" and filas[-1][4] == pytest.approx(354.0)
+    assert hoja.tables and not hoja._charts                                # tabla con filtros y sin gráficas
+    assert enc < len(filas) - 1
 
 
 def test_exportar_pdf_y_formato_invalido(conn, negocio, tmp_path):
@@ -127,11 +131,17 @@ def test_ticket_de_orden(conn, negocio, tmp_path):
     configuracion.establecer(conn, {"rol": "administrador", "id": 1}, "negocio_nombre", "Lavandería Oceánica")
     t = tickets.ticket_orden_texto(conn, negocio["b"])
     assert "OC-000002" in t and "TOTAL" in t and "240.00" in t
-    assert "SALDO PENDIENTE" in t and "140.00" in t and "Tarjeta" in t
+    assert "POR LIQUIDAR" in t and "140.00" in t and "Tarjeta" in t
     assert all(len(l) <= 42 for l in t.splitlines())
     assert "Lavandería Oceánica" in t.splitlines()[0]
+    for seccion in ("DATOS DEL CLIENTE", "DETALLES DE LA ORDEN #2", "CONDICIONES DEL SERVICIO", "ALMACENAJE",
+                    "Firma:", "***GRACIAS POR SU PREFERENCIA***", "lavanderiaoceanica.com"):
+        assert seccion in t, seccion
+    assert "* Responsabilidad limitada" in t                  # una condición por renglón, con viñeta
     pdf = tickets.ticket_orden_pdf(conn, negocio["a"], tmp_path / "ticket.pdf")
     assert pdf.read_bytes().startswith(b"%PDF")
+    logo = tickets.logo_escpos(42)                            # imagen ESC/POS centrada para la térmica
+    assert logo.startswith(b"\x1ba\x01\x1dv0\x00") and len(logo) > 1000
     assert "CANCELADA" in tickets.ticket_orden_texto(conn, negocio["c"])
 
 

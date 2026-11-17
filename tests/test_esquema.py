@@ -1,7 +1,6 @@
 """Validaciones estáticas del esquema (no requieren servidor MySQL)."""
 import re
 
-import pytest
 import sqlglot
 
 from oceanica.db import dividir_sentencias, listar_migraciones

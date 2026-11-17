@@ -1,5 +1,5 @@
 -- =====================================================================
--- Oceanica Gestion | Migracion 007: datos fiscales del cliente (sin timbrado)
+-- Oceanica Gestion | Migracion 010: datos fiscales del cliente (sin timbrado)
 -- Una sola sentencia: en InnoDB un ALTER TABLE se aplica completo o no se
 -- aplica, asi que si falla se puede reintentar sin dejar la tabla a medias.
 -- El correo de facturacion es la columna `email` que ya existia.

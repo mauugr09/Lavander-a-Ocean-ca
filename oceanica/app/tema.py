@@ -13,18 +13,18 @@ ALERTA = "#B86E00"
 ERROR = "#C0392B"
 
 HOJA_ESTILO = f"""
-* {{ font-size: 10.5pt; color: {TEXTO}; }}
+* {{ font-size: 12pt; color: {TEXTO}; }}
 QMainWindow, QDialog, QWidget#pagina, QWidget#fondo {{ background: {FONDO}; }}
-QLabel[rol="titulo"] {{ font-size: 17pt; font-weight: 700; color: {PRIMARIO}; }}
-QLabel[rol="subtitulo"] {{ font-size: 11pt; font-weight: 600; color: {PRIMARIO}; }}
+QLabel[rol="titulo"] {{ font-size: 20pt; font-weight: 700; color: {PRIMARIO}; }}
+QLabel[rol="subtitulo"] {{ font-size: 13pt; font-weight: 600; color: {PRIMARIO}; }}
 QLabel[rol="suave"] {{ color: {TEXTO_SUAVE}; }}
-QLabel[rol="total"] {{ font-size: 24pt; font-weight: 700; color: {PRIMARIO}; }}
+QLabel[rol="total"] {{ font-size: 28pt; font-weight: 700; color: {PRIMARIO}; }}
 QLabel[rol="error"] {{ color: {ERROR}; font-weight: 600; }}
 QLabel[rol="chip_ok"] {{ background: #DDF3E8; color: {OK}; border-radius: 10px; padding: 3px 12px; font-weight: 600; }}
 QLabel[rol="chip_alerta"] {{ background: #FCEBD0; color: {ALERTA}; border-radius: 10px; padding: 3px 12px; font-weight: 600; }}
 QLabel[rol="chip_neutro"] {{ background: #E3ECF4; color: {TEXTO_SUAVE}; border-radius: 10px; padding: 3px 12px; font-weight: 600; }}
 QFrame[rol="tarjeta"] {{ background: white; border: 1px solid {BORDE}; border-radius: 10px; }}
-QPushButton {{ background: white; border: 1px solid {BORDE}; border-radius: 6px; padding: 7px 14px; }}
+QPushButton {{ background: white; border: 1px solid {BORDE}; border-radius: 8px; padding: 10px 18px; }}
 QPushButton:hover {{ border-color: {SECUNDARIO}; }}
 QPushButton:pressed {{ background: #E6F3FA; }}
 QPushButton:disabled {{ color: #9FB0C0; background: #EEF3F7; }}
@@ -33,19 +33,20 @@ QPushButton[rol="primario"]:hover {{ background: {PRIMARIO_OSCURO}; }}
 QPushButton[rol="primario"]:disabled {{ background: #9DB3D9; color: white; }}
 QPushButton[rol="peligro"] {{ color: {ERROR}; border-color: #E3B5AF; }}
 QLineEdit, QComboBox, QDateTimeEdit, QDateEdit, QDoubleSpinBox, QSpinBox, QPlainTextEdit {{
-  background: white; border: 1px solid {BORDE}; border-radius: 6px; padding: 6px 8px; }}
-QLineEdit:focus, QComboBox:focus, QDateTimeEdit:focus, QDateEdit:focus, QPlainTextEdit:focus {{ border: 2px solid {SECUNDARIO}; padding: 5px 7px; }}
+  background: white; border: 1px solid {BORDE}; border-radius: 6px; padding: 9px 10px; }}
+QLineEdit:focus, QComboBox:focus, QDateTimeEdit:focus, QDateEdit:focus, QPlainTextEdit:focus {{ border: 2px solid {SECUNDARIO}; padding: 8px 9px; }}
 QTableWidget {{ background: white; alternate-background-color: #F6FAFD; border: 1px solid {BORDE};
   gridline-color: #E8F0F6; selection-background-color: #CFEAF7; selection-color: {TEXTO}; }}
 QTableWidget:focus {{ border: 2px solid {SECUNDARIO}; }}
-QHeaderView::section {{ background: #E8F1F8; border: none; border-bottom: 1px solid {BORDE}; padding: 7px; font-weight: 600; }}
+QHeaderView::section {{ background: #E8F1F8; border: none; border-bottom: 1px solid {BORDE}; padding: 9px; font-weight: 600; }}
 QListWidget#nav {{ background: {PRIMARIO}; border: none; outline: 0; padding-top: 6px; }}
-QListWidget#nav::item {{ color: white; padding: 12px 16px; border-radius: 6px; margin: 2px 8px; }}
+QListWidget#nav::item {{ color: white; font-size: 13pt; padding: 13px 14px; border-radius: 8px; margin: 3px 8px; }}
 QListWidget#nav::item:hover {{ background: #1B50B3; }}
 QListWidget#nav::item:selected {{ background: {SECUNDARIO}; color: white; font-weight: 600; }}
 QFrame#barra {{ background: white; border-bottom: 1px solid {BORDE}; }}
 QTabWidget::pane {{ border: 1px solid {BORDE}; background: white; border-radius: 6px; }}
-QTabBar::tab {{ padding: 8px 16px; background: #E8F1F8; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; }}
+QTabBar::tab {{ padding: 10px 20px; background: #E8F1F8; border-top-left-radius: 6px; border-top-right-radius: 6px; margin-right: 2px; }}
 QTabBar::tab:selected {{ background: white; font-weight: 600; color: {PRIMARIO}; }}
+QTextBrowser, QTextEdit {{ background: white; color: {TEXTO}; border: none; }}
 QToolTip {{ background: white; color: {TEXTO}; border: 1px solid {BORDE}; }}
 """

@@ -7,10 +7,9 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QMessageBox  # noqa: E402
 
-from oceanica.app import dialogos  # noqa: E402
+from oceanica.app import cobro, dialogos  # noqa: E402
 from oceanica.app.aplicacion import preparar_aplicacion  # noqa: E402
 from oceanica.app.carrito import Carrito  # noqa: E402
 from oceanica.app.contexto import Contexto  # noqa: E402
@@ -51,6 +50,13 @@ def test_carrito_totales_y_validaciones():
     assert c.items() == [{"servicio_id": 1, "cantidad": D("4.50")}, {"servicio_id": 2, "cantidad": D("2.00")}]
     c.quitar(0)
     assert len(c.lineas) == 1
+    c.sumar(0, 1)
+    assert c.lineas[0].cantidad == D("3")
+    with pytest.raises(ValueError, match="entero"):
+        c.fijar(0, D("2.5"))
+    c.fijar(0, D("1"))
+    c.sumar(0, -1)                                   # llega a cero: se quita la línea
+    assert not c
 
 
 # ---------- con base de datos -----------------------------------------------------
@@ -69,7 +75,7 @@ def _sin_dialogos(monkeypatch, pago=None):
     def cobro_exec(self):
         self.pago = pago
         return True
-    monkeypatch.setattr(dialogos.CobroDialog, "exec", cobro_exec)
+    monkeypatch.setattr(cobro.CobroDialog, "exec", cobro_exec)
     monkeypatch.setattr(dialogos.TicketDialog, "exec", lambda self: 1)
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: pytest.fail(f"Advertencia inesperada: {a[2]}"))
@@ -87,7 +93,7 @@ def test_todas_las_pantallas_abren(qapp, conn, admin, mundo):
     v = Ventana(ctx)
     v.abrir_shell(admin)
     assert [p.titulo for p in v.paginas] == ["Nueva orden", "Órdenes", "Caja", "Clientes", "Asistencia",
-                                             "Inventario", "Reportes", "Nómina", "Servicios y precios", "Empleados y usuarios",
+                                             "Inventario", "Panel del negocio", "Reportes", "Nómina", "Servicios y precios", "Empleados y usuarios",
                                              "Transferencias", "Configuración"]
     for i in range(len(v.paginas)):
         v.nav.setCurrentRow(i)
@@ -119,9 +125,36 @@ def test_flujo_completo_por_pantalla(qapp, conn, admin, empleado, mundo, monkeyp
     m.filtro.setText("tintoreria")                   # la búsqueda es solo por nombre del servicio
     assert m.visibles == []
     m.filtro.setText("")
-    m.tabla_serv.selectRow(0)
-    m.cantidad.setText("4")
-    m._agregar()
+    assert m.pila.currentIndex() == 0                # sin búsqueda vuelve a los botones de categorías
+    # piezas: abrir la categoría y tocar la opción (cada toque es una pieza; ＋/－ ajustan)
+    planchado = next(c for c in m.categorias if c["nombre"] == "Planchado")
+    m.abrir_categoria(planchado)
+    assert [s["nombre"] for s in m.visibles] == ["Edredón"]
+    m.elegir(m.visibles[0])
+    m.elegir(m.visibles[0])
+    assert m.lb_total.text() == "$240.00"
+    m.tabla_carrito.selectRow(0)
+    m._sumar(-1)                                     # «Quitar 1»: queda una pieza
+    assert m.carrito.lineas[0].cantidad == 1
+    preguntas = []
+    m.preguntar_eliminar = lambda nombre, cant: preguntas.append((nombre, cant)) or False
+    m._sumar(-1)                                     # la última pieza: pide confirmación y aquí dice «No»
+    assert preguntas == [("Edredón", "1 pieza")] and len(m.carrito.lineas) == 1
+    m.elegir(m.visibles[0])
+    m.elegir(m.visibles[0])
+    m.tabla_carrito.selectRow(0)
+    m._quitar()                                      # «Eliminar» todo el servicio: también pregunta
+    assert preguntas[-1] == ("Edredón", "3 piezas") and len(m.carrito.lineas) == 1
+    m.preguntar_eliminar = lambda nombre, cant: True
+    m._quitar()
+    assert not m.carrito
+    # ropa por kilo: el botón grande abre el teclado (aquí simulado) con los kilos de la báscula
+    m.pedir_kilos = lambda servicio, actual=None: D("3") if actual is None else D("4")
+    m.abrir_kilo()
+    assert m.lb_total.text() == "$85.50"
+    m.tabla_carrito.selectRow(0)
+    assert m.b_menos.text() == "Cambiar kilos" and not m.b_mas.isVisibleTo(m)
+    m._sumar(-1)                                     # en kilos, «Cambiar kilos» abre el teclado para corregir
     assert m.lb_total.text() == "$114.00"
     cid = clientes.crear_cliente(conn, admin, "Ana", "Torres", "5511112222")
     m.cliente_id = cid
@@ -159,9 +192,7 @@ def test_mostrador_sin_caja_no_cobra_anticipo(qapp, conn, admin, mundo, monkeypa
     from oceanica.app.v_mostrador import MostradorView
     m = MostradorView(ctx)
     m.al_mostrar()
-    m.tabla_serv.selectRow(0)
-    m.cantidad.setText("2")
-    m._agregar()
+    m.agregar(m.servicios[0], D("2"))
     m.guardar()
     assert any("No hay caja abierta" in a for a in avisos)
     assert ordenes.listar_ordenes(conn) == []  # no se creó nada
@@ -180,22 +211,50 @@ def test_pin_dialog_valida_y_bloquea(qapp, conn, mundo):
 
 
 def test_cobro_dialog_reglas(qapp, conn, mundo):
+    from oceanica.app.cobro import P_EFECTIVO, P_METODO, P_PARTE, sugerencias_billetes
     ctx = Contexto(conn)
-    d = dialogos.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
-    d.monto.setText("150")
+    ef = [m for m in caja.listar_metodos(conn) if m["es_efectivo"]][0]["id"]
+    tr = [m for m in caja.listar_metodos(conn) if m["requiere_confirmacion"]][0]["id"]
+    # paga solo una parte: no puede ser más que el saldo
+    d = cobro.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
+    assert not d.b_despues.isVisibleTo(d)              # «al recoger» solo existe al crear la orden
+    d.elegir_modo("parte")
+    assert d.pila.currentIndex() == P_PARTE
+    d.teclado_parte.pantalla.setText("150")
+    d.confirmar_parte()
+    assert "No puede ser más" in d.msg.text()
+    d.teclado_parte.pantalla.setText("40")
+    assert "60.00" in d.lb_resto.text()
+    d.confirmar_parte()
+    assert d.pila.currentIndex() == P_METODO
+    d.elegir_metodo(ef)
+    assert d.pila.currentIndex() == P_EFECTIVO
+    d.recibido.setText("20")
     d._aceptar()
-    assert d.pago is None and "mayor" in d.msg.text()
-    tr = [m for m in d.metodos.values() if m["requiere_confirmacion"]][0]
-    d.metodo.setCurrentIndex(d.metodo.findData(tr["id"]))
-    d.monto.setText("100")
+    assert d.pago is None and "menos" in d.msg.text()
+    d.recibido.setText("50")
+    assert d.lb_cambio.text() == "Cambio: $10.00"
     d._aceptar()
-    assert d.pago is None and "clave de rastreo" in d.msg.text()
-    d.referencia.setText("MBAN1")
-    d._aceptar()
-    assert d.pago == {"metodo_pago_id": tr["id"], "monto": D("100"), "referencia": "MBAN1"}
-    e = dialogos.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
-    e._aceptar()  # sin monto = sin anticipo
+    assert d.pago == {"metodo_pago_id": ef, "monto": D("40.00"), "referencia": None}
+    # transferencia: exige la captura o la clave de rastreo
+    t = cobro.CobroDialog(ctx, None, D("100"), "Cobro", permite_cero=False)
+    t.elegir_modo("todo")
+    t.elegir_metodo(tr)
+    t._aceptar()
+    assert t.pago is None and "captura" in t.msg.text()
+    t.referencia.setText("MBAN1")
+    t._aceptar()
+    assert t.pago == {"metodo_pago_id": tr, "monto": D("100"), "referencia": "MBAN1"}
+    # al crear la orden se puede dejar todo para cuando recoja
+    e = cobro.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
+    e.elegir_modo("despues")
     assert e.pago is None and e.result() == 1
+    # «Atrás» regresa al paso anterior
+    a = cobro.CobroDialog(ctx, None, D("100"), "Anticipo", permite_cero=True)
+    a.elegir_modo("todo")
+    a.atras()
+    assert a.pila.currentIndex() == 0
+    assert sugerencias_billetes(D("126")) == [D(150), D(200), D(500), D(1000)]
 
 
 def test_inventario_por_pantalla(qapp, conn, admin, empleado, mundo, monkeypatch):
@@ -322,26 +381,22 @@ def test_entrega_con_transferencia_por_confirmar_pide_a_la_encargada(qapp, conn,
 
 
 def test_cobro_con_transferencia_acepta_captura_de_pantalla(qapp, conn, mundo):
-    from decimal import Decimal
     ctx = Contexto(conn)
-    dlg = dialogos.CobroDialog(ctx, None, Decimal("100"), "Cobrar", permite_cero=False)
-    dlg.metodo.setCurrentIndex(dlg.metodo.findText("Transferencia"))
+    tr = [m for m in caja.listar_metodos(conn) if m["requiere_confirmacion"]][0]["id"]
+    dlg = cobro.CobroDialog(ctx, None, D("100"), "Cobrar", permite_cero=False)
+    dlg.elegir_modo("todo")
+    dlg.elegir_metodo(tr)
     dlg._aceptar()
     assert dlg.pago is None and "captura" in dlg.msg.text().lower()   # sin comprobante no se acepta
     dlg.captura.setChecked(True)
     dlg._aceptar()
     assert dlg.pago["referencia"] == "CAPTURA DE PANTALLA"
-    dlg2 = dialogos.CobroDialog(ctx, None, Decimal("100"), "Cobrar", permite_cero=False)
-    dlg2.metodo.setCurrentIndex(dlg2.metodo.findText("Transferencia"))
-    dlg2.referencia.setText("MBAN9981")
-    dlg2._aceptar()
-    assert dlg2.pago["referencia"] == "MBAN9981"
 
 
 def test_nomina_por_pantalla_de_la_semana_al_recibo(qapp, conn, admin, mundo, monkeypatch, tmp_path):
     from datetime import date, datetime, timedelta
     from oceanica.app import v_nomina
-    from oceanica.servicios import empleados, nomina
+    from oceanica.servicios import empleados
     _sin_dialogos(monkeypatch)
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     monkeypatch.setattr(v_nomina, "RAIZ", tmp_path)
@@ -437,6 +492,62 @@ def datetime_(dia, hora):
     return datetime(dia.year, dia.month, dia.day, hora)
 
 
+def test_cambiar_de_seccion_no_abre_ventanitas_sueltas(qapp, conn, admin, mundo):
+    """Ningún botón o etiqueta debe aparecer un instante como ventana propia al cambiar de sección."""
+    from PySide6.QtCore import QEvent, QObject
+    from PySide6.QtWidgets import QDialog
+
+    v = Ventana(Contexto(conn))
+    sueltas = []
+
+    class Vigia(QObject):
+        def eventFilter(self, o, e):
+            if (e.type() == QEvent.Show and o.isWidgetType() and o.isWindow() and o is not v
+                    and not isinstance(o, QDialog) and not o.inherits("QMenu")
+                    and not o.inherits("QAbstractItemView")):  # listas de sugerencias del autocompletado
+                sueltas.append(type(o).__name__)
+            return False
+
+    vigia = Vigia()
+    qapp.installEventFilter(vigia)
+    try:
+        v.show()
+        v.abrir_shell(admin)
+        for i in list(range(len(v.paginas))) + [0, 3, 0]:
+            v.nav.setCurrentRow(i)
+            qapp.processEvents()
+    finally:
+        qapp.removeEventFilter(vigia)
+        v.cerrar_sesion()
+        v.close()
+    assert sueltas == []
+
+
+def test_mostrador_servicio_a_domicilio(qapp, conn, admin, empleado, mundo, monkeypatch):
+    _sin_dialogos(monkeypatch)
+    configuracion.establecer(conn, admin, "cargo_domicilio", "30")
+    try:
+        ctx = Contexto(conn)
+        ctx.identificar = lambda *a, **k: empleado
+        from oceanica.app.v_mostrador import MostradorView
+        m = MostradorView(ctx)
+        m.al_mostrar()
+        m.agregar(next(s for s in m.servicios if s["unidad"] == "pieza"), D("1"))   # Edredón $120
+        m.elegir_entrega("domicilio")
+        assert m.cargo.isReadOnly() and m.lb_total.text() == "$150.00"            # el empleado no cambia el cargo
+        avisos = []
+        monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: avisos.append(a[2]))
+        m.guardar()
+        assert avisos and "dirección" in avisos[0] and ordenes.listar_ordenes(conn) == []
+        m.direccion.setText("Calle Pino 4, Col. Centro")
+        m.guardar()
+        o = ordenes.obtener_orden(conn, ordenes.listar_ordenes(conn)[0]["id"])
+        assert o["tipo_entrega"] == "domicilio" and o["total"] == D("150.00")
+        assert m.b_recoge.isChecked() and not m.p_domicilio.isVisibleTo(m)       # la siguiente orden vuelve a mostrador
+    finally:
+        configuracion.establecer(conn, admin, "cargo_domicilio", "0")
+
+
 # ---------- factura (alcance mínimo) y pulido de uso -------------------------------------
 
 FISCAL = {"rfc": "ABC010203XY1", "razon_social": "Hotel del Lago", "regimen_fiscal": "601", "uso_cfdi": "G03",
@@ -468,9 +579,7 @@ def _mostrador_con_linea(ctx, monkeypatch):
     from oceanica.app.v_mostrador import MostradorView
     m = MostradorView(ctx)
     m.al_mostrar()
-    m.tabla_serv.selectRow(0)
-    m.cantidad.setText("2")
-    m._agregar()
+    assert m.agregar(next(s for s in m.servicios if s["unidad"] == "kilo"), D("2"))
     return m
 
 
@@ -482,7 +591,7 @@ def test_mostrador_orden_con_factura(qapp, conn, admin, empleado, mundo, monkeyp
     ctx.identificar = lambda *a, **k: empleado
     m = _mostrador_con_linea(ctx, monkeypatch)
     m.factura.setChecked(True)
-    assert "elige o da de alta al cliente" in m.info_cli.text()
+    assert "elija o dé de alta al cliente" in m.info_cli.text()
     m.guardar()                                                     # sin cliente no se puede facturar
     assert avisos and "Para facturar" in avisos[-1] and ordenes.listar_ordenes(conn) == []
     assert m.carrito                                                # no se perdió la captura
@@ -505,29 +614,34 @@ def test_esc_pregunta_antes_de_borrar_la_captura(qapp, conn, admin, mundo, monke
     ctx = Contexto(conn)
     ctx.admin = admin
     m = _mostrador_con_linea(ctx, monkeypatch)
+    m.ir_inicio()
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.No)
-    m._esc()
+    m._escape()
     assert len(m.carrito.lineas) == 1                               # un Esc por error no borra la orden
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
-    m._esc()
+    m._escape()
     assert not m.carrito
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: pytest.fail("con la orden vacía no debe preguntar"))
-    m._esc()
+    m._escape()
 
 
-def test_mostrador_explica_cuando_no_hay_servicios(qapp, conn, admin, monkeypatch):
-    _sin_dialogos(monkeypatch)
+def test_mostrador_explica_categorias_vacias_y_busquedas_sin_resultado(qapp, conn, admin, mundo):
+    from oceanica.app.v_mostrador import MostradorView
     ctx = Contexto(conn)
     ctx.admin = admin
-    from oceanica.app.v_mostrador import MostradorView
+    cur = conn.cursor()
+    cur.execute("INSERT INTO categorias_servicio (nombre) VALUES ('Cortinas')")   # categoría todavía sin servicios
+    conn.commit()
+    cur.close()
     m = MostradorView(ctx)
     m.al_mostrar()
-    assert "Servicios y precios" in m.lb_sin_serv.text()
-    m.servicios = [{"id": 1, "nombre": "Lavado", "unidad": "kilo", "precio": D("30")}]
-    m.filtro.setText("planch")
-    assert "planch" in m.lb_sin_serv.text()
-    m.filtro.setText("lav")
-    assert m.lb_sin_serv.text() == ""
+    vacia = next(c for c in m.categorias if c["nombre"] == "Cortinas")
+    m.abrir_categoria(vacia)
+    assert not m.lb_vacio.isHidden() and "Servicios y precios" in m.lb_vacio.text()
+    m.filtro.setText("zzz")
+    assert m.visibles == [] and "No se encontró" in m.lb_vacio.text()
+    m.filtro.setText("lavado")
+    assert m.visibles and m.lb_vacio.isHidden()
 
 
 def test_factura_desde_la_pantalla_de_ordenes(qapp, conn, admin, empleado, mundo, monkeypatch):

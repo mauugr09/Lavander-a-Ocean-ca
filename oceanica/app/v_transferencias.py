@@ -1,7 +1,7 @@
 """Transferencias por confirmar contra el banco (administrador)."""
 from __future__ import annotations
 
-from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QInputDialog, QPushButton, QVBoxLayout, QWidget
 
 from ..servicios import caja
 from .util import crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, poblar, seguro
@@ -17,7 +17,7 @@ class TransferenciasView(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 16)
         lay.addWidget(etiqueta("Transferencias por confirmar", "titulo"))
-        lay.addWidget(etiqueta("Revisa en el banco que el dinero llegó. Si no llegó, recházala y la orden recupera su saldo "
+        lay.addWidget(etiqueta("Revise en el banco que el dinero llegó. Si no llegó, rechace la transferencia y la orden recupera su saldo "
                                "(requiere caja abierta).", "suave", True))
         self.tabla = crear_tabla(["Folio", "Fecha", "Monto", "Clave de rastreo", "Cobró", "Orden"], derecha=(2,), estirar=3)
         lay.addWidget(self.tabla, 1)

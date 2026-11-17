@@ -38,7 +38,7 @@ class ServicioDialog(QDialog):
         if d:
             self.unidad.setCurrentIndex(self.unidad.findData(d["unidad"]))
         self.precio = QLineEdit(f"{d['precio']:.2f}" if d else "")
-        form.addRow("Categoría (escribe una nueva si hace falta)", self.categoria)
+        form.addRow("Categoría (escriba una nueva si hace falta)", self.categoria)
         form.addRow("Nombre", self.nombre)
         form.addRow("Se cobra", self.unidad)
         form.addRow("Precio $", self.precio)
@@ -50,11 +50,11 @@ class ServicioDialog(QDialog):
 
     def _validar(self):
         if not self.categoria.currentText().strip() or not self.nombre.text().strip():
-            QMessageBox.warning(self, "Oceánica", "Escribe la categoría y el nombre del servicio.")
+            QMessageBox.warning(self, "Oceánica", "Escriba la categoría y el nombre del servicio.")
             return
         p = a_decimal(self.precio.text())
         if p is None or p < 0:
-            QMessageBox.warning(self, "Oceánica", "Escribe un precio válido.")
+            QMessageBox.warning(self, "Oceánica", "Escriba un precio válido.")
             return
         self.accept()
 

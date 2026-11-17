@@ -17,11 +17,34 @@ NOMBRE_ESTADO = {"recibida": "recibida", "en_proceso": "en proceso", "lista": "l
 _ORDEN_FLUJO = {"recibida": 0, "en_proceso": 1, "lista": 2, "entregada": 3}
 
 
-def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo, requiere_factura) -> int:
+def cargo_domicilio_configurado(conn) -> Decimal:
+    with transaccion(conn) as cur:
+        return dinero(config_valor(cur, "cargo_domicilio", "0") or "0", "cargo_domicilio")
+
+
+def _datos_entrega(cur, sesion, entrega) -> tuple[str, Decimal, str | None]:
+    """(tipo, cargo, dirección). Recoger en mostrador no tiene cargo ni dirección."""
+    tipo = (entrega or {}).get("tipo") or "mostrador"
+    if tipo == "mostrador":
+        return "mostrador", CERO, None
+    if tipo != "domicilio":
+        raise ErrorNegocio("Tipo de entrega no válido.")
+    direccion = texto(entrega.get("direccion"), "dirección de entrega", 255)
+    configurado = dinero(config_valor(cur, "cargo_domicilio", "0") or "0", "cargo_domicilio")
+    cargo = configurado if entrega.get("cargo") is None else dinero(entrega["cargo"], "cargo a domicilio")
+    if cargo < 0:
+        raise ErrorNegocio("El cargo a domicilio no puede ser negativo.")
+    if cargo != configurado and not es_admin(sesion):
+        raise ErrorNegocio("Solo el administrador puede cambiar el cargo a domicilio.")
+    return "domicilio", cargo, direccion
+
+
+def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo, entrega=None,
+           requiere_factura=False) -> int:
     if not items:
-        raise ErrorNegocio("Agrega al menos un servicio a la orden.")
+        raise ErrorNegocio("Agregue al menos un servicio a la orden.")
     if requiere_factura and cliente_id is None:
-        raise ErrorNegocio("Para facturar, elige o da de alta al cliente. Las ventas de mostrador no se facturan.")
+        raise ErrorNegocio("Para facturar, elija o dé de alta al cliente. Las ventas de mostrador no se facturan.")
     observaciones = texto(observaciones, "observaciones", 300, False)
     descuento = dinero(descuento, "descuento")
     if descuento < 0:
@@ -52,8 +75,9 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
         if descuento > 0 and not es_admin(sesion):
             tope = Decimal(config_valor(cur, "descuento_max_pct_empleado", "10") or "0")
             if subtotal == 0 or descuento * 100 / subtotal > tope:
-                raise ErrorNegocio(f"Un empleado puede dar hasta {tope}% de descuento. Pide autorización al administrador.")
-        total = subtotal - descuento
+                raise ErrorNegocio(f"Un empleado puede dar hasta {tope}% de descuento. Pida autorización al administrador.")
+        tipo_entrega, cargo, direccion = _datos_entrega(cur, sesion, entrega)
+        total = subtotal - descuento + cargo
 
         ahora = datetime.now()
         if fecha_promesa is None:
@@ -65,9 +89,10 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
         folio = siguiente_folio(cur, prefijo)
         cur.execute(
             "INSERT INTO ordenes (folio, cliente_id, usuario_id, fecha_recepcion, fecha_promesa, subtotal, "
-            "descuento, total, observaciones, requiere_factura) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            "descuento, total, observaciones, tipo_entrega, cargo_domicilio, direccion_entrega, requiere_factura) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             (folio, cliente_id, sesion["id"], ahora, fecha_promesa, subtotal, descuento, total, observaciones,
-             int(bool(requiere_factura))),
+             tipo_entrega, cargo, direccion, int(bool(requiere_factura))),
         )
         orden_id = cur.lastrowid
         for servicio_id, desc, cant, precio, importe in lineas:
@@ -94,22 +119,24 @@ def _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observacio
 
 def crear_orden(conn, sesion, items: list[dict], cliente_id: int | None = None,
                 fecha_promesa: datetime | None = None, descuento=0, observaciones: str | None = None,
-                anticipo: dict | None = None, requiere_factura: bool = False) -> int:
+                anticipo: dict | None = None, entrega: dict | None = None, requiere_factura: bool = False) -> int:
     """items: [{'servicio_id', 'cantidad', 'descripcion'(opcional)}].
+    entrega: None = recoge en mostrador; {'tipo': 'domicilio', 'direccion': ..., 'cargo': opcional}.
+    El cargo a domicilio sale de la configuración; solo el administrador puede cambiarlo en la orden.
     anticipo: {'metodo_pago_id', 'monto', 'referencia'(opcional)} (requiere caja abierta).
     requiere_factura: el cliente pidió factura (exige cliente; la factura se emite fuera del sistema).
     Todo ocurre en una sola transacción: si el anticipo falla, no se crea la orden."""
     requerir_rol(sesion, "administrador", "empleado")
     for intento in range(3):
         try:
-            return _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo,
+            return _crear(conn, sesion, items, cliente_id, fecha_promesa, descuento, observaciones, anticipo, entrega,
                           requiere_factura)
         except mysql.connector.IntegrityError as e:
             # Dos órdenes simultáneas pudieron calcular el mismo folio: se reintenta.
             if e.errno == 1062 and "folio" in str(e).lower() and intento < 2:
                 continue
             raise
-    raise ErrorNegocio("No se pudo generar el folio de la orden. Intenta de nuevo.")
+    raise ErrorNegocio("No se pudo generar el folio de la orden. Intente de nuevo.")
 
 
 def cambiar_estado(conn, sesion, orden_id: int, nuevo_estado: str, nota: str | None = None,
@@ -177,13 +204,13 @@ def cancelar_orden(conn, sesion, orden_id: int, motivo: str) -> None:
             raise ErrorNegocio(f"La orden ya está {o['estado']}.")
         if o["facturada"]:
             # Cancelar aquí no cancela el CFDI: quedaría una factura vigente de un servicio que no se cobró.
-            raise ErrorNegocio(f"La orden ya está facturada (folio {o['factura_folio'] or 'sin anotar'}). Cancela primero "
-                               "la factura en tu sistema de facturación y pide a la encargada que quite la marca.")
+            raise ErrorNegocio(f"La orden ya está facturada (folio {o['factura_folio'] or 'sin anotar'}). Cancele primero "
+                               "la factura en su sistema de facturación y pida a la encargada que quite la marca.")
         if o["estado"] != "recibida" and not es_admin(sesion):
             raise ErrorNegocio("Solo el administrador puede cancelar una orden que ya está en proceso.")
         pagado = pagado_neto_cur(cur, orden_id)
         if pagado != 0:
-            raise ErrorNegocio(f"La orden tiene ${pagado} cobrados. Registra primero el reembolso.")
+            raise ErrorNegocio(f"La orden tiene ${pagado} cobrados. Registre primero el reembolso.")
         cur.execute("UPDATE ordenes SET estado = 'cancelada' WHERE id = %s", (orden_id,))
         cur.execute(
             "INSERT INTO orden_historial_estado (orden_id, estado_anterior, estado_nuevo, usuario_id, nota) "

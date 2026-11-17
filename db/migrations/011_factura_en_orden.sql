@@ -1,12 +1,12 @@
 -- =====================================================================
--- Oceanica Gestion | Migracion 008: banderas de factura en la orden
+-- Oceanica Gestion | Migracion 011: banderas de factura en la orden
 -- La factura se timbra fuera del sistema; aqui solo se controla que se
 -- pidio y que ya se hizo (con el folio externo, opcional).
--- Una sola sentencia, por la misma razon que la 007.
+-- Una sola sentencia, por la misma razon que la 010.
 -- =====================================================================
 
 ALTER TABLE ordenes
-  ADD COLUMN requiere_factura TINYINT(1) NOT NULL DEFAULT 0 AFTER observaciones,
+  ADD COLUMN requiere_factura TINYINT(1) NOT NULL DEFAULT 0 AFTER direccion_entrega,
   ADD COLUMN facturada TINYINT(1) NOT NULL DEFAULT 0 AFTER requiere_factura,
   ADD COLUMN factura_folio VARCHAR(40) NULL COMMENT 'folio o UUID de la factura emitida fuera del sistema' AFTER facturada,
   ADD COLUMN facturada_en DATETIME NULL AFTER factura_folio,
