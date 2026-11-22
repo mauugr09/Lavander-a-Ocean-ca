@@ -46,6 +46,7 @@ programa no abre (para no trabajar con la base a medias), avisa que se llame a l
 detalle y el comando exacto para regresar a como estaba. Para soporte técnico sigue existiendo
 `OceanicaAdmin.exe migrar` (con `--sin-respaldo` solo si el respaldo previo no se puede hacer y ya hay otro de hoy).
 
+- **Migración 014 (código de barras).** Agrega el ajuste `codigo_barras` (`si`): folio en Code128 en ticket y etiquetas.
 - **El programa se actualiza solo al abrir; respaldo diario programado; recuperar la contraseña de la encargada.** El instalador programa el respaldo diario en el Programador de tareas (`OceanicaAdmin.exe
   programar-respaldo`): a la hora de `respaldo_hora` (21:00) y, si la computadora estaba apagada, en cuanto se
   enciende. Nuevo `OceanicaAdmin.exe restablecer-admin` (menú Inicio → «Restablecer contraseña de administrador»): pone
@@ -114,7 +115,8 @@ En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construi
 ### Operación diaria
 - **Aviso de respaldo:** en modo administrador, la barra superior dice de cuándo es el último respaldo. Naranja si tiene más de un día, nunca se ha hecho o el archivo ya no está; gris si no se copió al disco externo.
 - **Avisar por WhatsApp** (Órdenes, orden lista): abre WhatsApp con el mensaje ya escrito para el teléfono del cliente. El sistema no envía nada: lo manda el empleado y confirma que lo envió; queda anotado cuándo y quién. Requiere WhatsApp Web o de escritorio con sesión iniciada en esa PC y teléfonos de 10 dígitos.
-- **Etiquetas de bolsa** (Órdenes): una etiqueta de texto por bolsa («BOLSA 1 DE 3», folio, cliente, entrega) en la misma impresora de tickets. Sin código de barras.
+- **Etiquetas de bolsa** (Órdenes): una etiqueta por bolsa («BOLSA 1 DE 3», folio, cliente, entrega) en la misma impresora de tickets, con el folio en código de barras.
+- **Código de barras**: el folio sale en Code128 en el ticket y en cada etiqueta (impresión directa y PDF). Cualquier lector USB «tipo teclado» funciona sin configurarlo: en Órdenes (F3) se escanea y la orden queda seleccionada, aunque ya esté entregada. Si la impresora imprime símbolos raros en lugar de barras: Configuración → `codigo_barras` = `no`.
 - **Reportes → Entregas a domicilio:** la ruta de reparto, con dirección, teléfono y lo que falta cobrar; primero las que ya están listas.
 - **Reportes → Ropa olvidada:** órdenes listas que llevan más de `almacenaje_dias` sin recogerse, con el último aviso. El sistema no calcula ni cobra cuota de almacenaje: solo las lista.
 
@@ -193,5 +195,5 @@ En una base de pruebas: `python -m oceanica.datos_demo`. Crea servicios con prec
   En modo RAW, Windows no avisa si la impresora no tiene papel: el ticket puede «imprimirse» sin salir.
 - `construir_exe.bat`, `Oceanica.exe`, `OceanicaAdmin.exe` y el instalador no se han verificado en Windows con la factura.
 - No timbra facturas (CFDI): solo controla cuáles hay que hacer. Funciona en una sola computadora.
-- Código de barras y lector: pendiente de confirmar con el cliente (issue #1 del repositorio). No está construido; las etiquetas de bolsa son solo texto.
+- Código de barras: construido sin confirmación del cliente (issue #1). El PDF se comprobó con un lector por software (zbar); la impresión directa (comando ESC/POS `GS k`) falta probarla en la térmica real. Si no la soporta, se apaga en Configuración.
 - Nómina no es fiscal: no sustituye CFDI ni obligaciones de IMSS/SAT.

@@ -261,7 +261,7 @@ class TicketDialog(QDialog):
             lb.setAlignment(Qt.AlignCenter)
             lb.setStyleSheet("background: white; padding: 8px;")
             lay.addWidget(lb)
-        vista = QPlainTextEdit(texto)
+        vista = QPlainTextEdit(tickets.para_pantalla(texto))  # el código de barras se ve como recuadro con el folio
         vista.setReadOnly(True)
         fuente = QFont("Consolas")
         fuente.setStyleHint(QFont.Monospace)

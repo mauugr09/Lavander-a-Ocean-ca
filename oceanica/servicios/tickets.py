@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import logging
+import re
 import textwrap
 from decimal import Decimal
 from pathlib import Path
 
+from reportlab.graphics.barcode import code128
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import getSampleStyleSheet
@@ -149,7 +151,10 @@ def ticket_orden_texto(conn, orden_id: int) -> str:
     if almacenaje:
         L += ["", *_titulo("ALMACENAJE", ancho), *textwrap.wrap(almacenaje, ancho)]
     linea = "_" * max(ancho - 12, 10)
-    L += ["", f"Anticipo:  {linea}", f"Saldo:     {linea}", f"Firma:     {linea}", "", "=" * ancho]
+    L += ["", f"Anticipo:  {linea}", f"Saldo:     {linea}", f"Firma:     {linea}", ""]
+    if codigo_barras_activo(conn):
+        L += [marca_codigo(o["folio"]), ""]
+    L.append("=" * ancho)
     pie = (cfg.get("ticket_pie") or "").strip()
     if pie:
         L += _centrado(f"***{pie.upper()}***" if len(pie) + 6 <= ancho else pie.upper(), ancho)
@@ -187,7 +192,7 @@ def ticket_corte_texto(conn, corte_id: int) -> str:
 
 def etiquetas_bolsa_texto(conn, orden_id: int, bolsas: int) -> str:
     """Una etiqueta por bolsa o paquete de la orden, para pegarla y no confundir la ropa de dos clientes.
-    Solo texto (folio, cliente, «bolsa 1 de 3», fecha de entrega): no lleva código de barras."""
+    Folio, cliente, «bolsa 1 de 3» y fecha de entrega; con el código de barras activo, también el folio en barras."""
     try:
         bolsas = int(bolsas)
     except (TypeError, ValueError):
@@ -199,9 +204,13 @@ def etiquetas_bolsa_texto(conn, orden_id: int, bolsas: int) -> str:
     cli = o["cliente"]
     nombre = " ".join(filter(None, [cli["nombre"], cli["apellidos"]])) if cli else "MOSTRADOR"
     sep = "=" * ancho
+    con_barras = codigo_barras_activo(conn)
     L: list[str] = []
     for n in range(1, bolsas + 1):
-        L += [sep, *_centrado(o["folio"], ancho), *_centrado(nombre.upper()[:ancho], ancho)]
+        L += [sep, *_centrado(o["folio"], ancho)]
+        if con_barras:
+            L.append(marca_codigo(o["folio"]))
+        L += _centrado(nombre.upper()[:ancho], ancho)
         if cli and cli["telefono"]:
             L += _centrado(f"Tel. {cli['telefono']}", ancho)
         L += [*_centrado(f"BOLSA {n} DE {bolsas}", ancho), *_centrado(f"Entrega: {_fecha(o['fecha_promesa'])}", ancho)]
@@ -211,6 +220,55 @@ def etiquetas_bolsa_texto(conn, orden_id: int, bolsas: int) -> str:
             L += _centrado(f"POR COBRAR ${_dinero(o['saldo'])}", ancho)
         L += [sep, "", ""]
     return "\n".join(L) + "\n"
+
+
+# ---------- Código de barras del folio ----------------------------------------
+# En el texto del ticket o de la etiqueta, una línea [[CODIGO:OC-000123]] marca dónde va el código de barras. La
+# impresora térmica (ESC/POS) y el PDF la dibujan como barras Code128; en pantalla se ve como texto. Cualquier lector
+# USB «tipo teclado» lo lee como si se escribiera el folio y Enter (en Órdenes encuentra la orden).
+
+_MARCA = re.compile(r"^\[\[CODIGO:([\x21-\x5c\x5e-\x7e]{1,30})\]\]$")  # Code128 B: ASCII imprimible, sin «]»
+
+
+def marca_codigo(folio: str) -> str:
+    return f"[[CODIGO:{folio}]]"
+
+
+def codigo_en_linea(linea: str) -> str | None:
+    m = _MARCA.match(linea.strip())
+    return m.group(1) if m else None
+
+
+def codigo_barras_activo(conn) -> bool:
+    return configuracion.obtener(conn, "codigo_barras", "si").strip().lower() in ("si", "sí", "1")
+
+
+def para_pantalla(texto: str, ancho: int = 42) -> str:
+    """El texto como se ve en la vista previa: la marca se muestra como un recuadro con el folio."""
+    salida = []
+    for linea in texto.split("\n"):
+        codigo = codigo_en_linea(linea)
+        salida.append(f"|||| {codigo} ||||".center(ancho).rstrip() if codigo else linea)
+    return "\n".join(salida)
+
+
+def codigo_barras_escpos(dato: str) -> bytes:
+    """Code128 (juego B) centrado, de unos 10 mm de alto, con el folio legible debajo."""
+    contenido = b"{B" + dato.encode("ascii")
+    return (b"\x1ba\x01"          # centrar
+            b"\x1dh\x50"          # alto: 80 puntos
+            b"\x1dw\x02"          # ancho de cada barra: 2 puntos
+            b"\x1dH\x02"          # folio legible debajo
+            b"\x1dk\x49" + bytes([len(contenido)]) + contenido
+            + b"\n\x1ba\x00")    # de vuelta a la izquierda
+
+
+def _texto_escpos(texto: str) -> bytes:
+    partes = []
+    for linea in texto.rstrip("\n").split("\n"):
+        codigo = codigo_en_linea(linea)
+        partes.append(codigo_barras_escpos(codigo) if codigo else linea.encode("cp850", errors="replace") + b"\n")
+    return b"".join(partes)
 
 
 # ---------- Logo -------------------------------------------------------------
@@ -285,7 +343,9 @@ def texto_a_pdf_ticket(texto: str, ruta, logo: bool = False) -> Path:
     ruta.parent.mkdir(parents=True, exist_ok=True)
     lineas = texto.rstrip("\n").split("\n")
     alto_logo = 34 * mm if logo and RUTA_LOGO.exists() else 0
-    alto = len(lineas) * 10 + 24 + alto_logo
+    alto_codigo = 17 * mm
+    n_codigos = sum(1 for l in lineas if codigo_en_linea(l))
+    alto = (len(lineas) - n_codigos) * 10 + n_codigos * alto_codigo + 24 + alto_logo
     c = canvas.Canvas(str(ruta), pagesize=(80 * mm, alto))
     y = alto - 14
     if alto_logo:
@@ -294,6 +354,13 @@ def texto_a_pdf_ticket(texto: str, ruta, logo: bool = False) -> Path:
         y -= alto_logo
     c.setFont("Courier", 8)
     for l in lineas:
+        codigo = codigo_en_linea(l)
+        if codigo:
+            barras = code128.Code128(codigo, barHeight=11 * mm, barWidth=0.33 * mm, humanReadable=True, fontSize=8)
+            barras.drawOn(c, (80 * mm - barras.width) / 2, y - 11 * mm)
+            c.setFont("Courier", 8)
+            y -= alto_codigo
+            continue
         c.drawString(8, y, l)
         y -= 10
     c.save()
@@ -324,8 +391,7 @@ def imprimir_texto(texto: str, impresora: str | None = None, logo: bytes = b"") 
                              "Puede abrir el PDF del ticket e imprimirlo desde ahí.")
     try:
         nombre = impresora or win32print.GetDefaultPrinter()
-        datos = (b"\x1b@" + logo + b"\x1bt\x02" + texto.encode("cp850", errors="replace") + b"\n\n\n\n"
-                 + b"\x1dV\x42\x00")
+        datos = b"\x1b@" + logo + b"\x1bt\x02" + _texto_escpos(texto) + b"\n\n\n" + b"\x1dV\x42\x00"
         h = win32print.OpenPrinter(nombre)
         try:
             win32print.StartDocPrinter(h, 1, ("Ticket", None, "RAW"))
