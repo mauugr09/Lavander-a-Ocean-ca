@@ -26,15 +26,19 @@ def _root():
 
 
 @pytest.fixture()
-def servidor_nuevo():
+def servidor_nuevo(monkeypatch):
     """Simula un servidor recién instalado: un administrador con todos los permisos y SIN contraseña."""
+    # En el CI la base corre en Docker y la conexión llega desde la red de Docker, no desde «la misma PC».
+    # Solo para esta base desechable, el usuario del sistema también se crea para '%'; en producción no.
+    from oceanica import init_db
+    monkeypatch.setattr(init_db, "HOSTS_LOCALES", init_db.HOSTS_LOCALES + ("%",))
     r = _root()
     cur = r.cursor()
 
     def limpiar():
         for h in HOSTS_RAIZ:
             cur.execute(f"DROP USER IF EXISTS '{RAIZ}'@'{h}'")
-        for h in ("localhost", "127.0.0.1", "::1"):
+        for h in ("localhost", "127.0.0.1", "::1", "%"):
             cur.execute(f"DROP USER IF EXISTS '{APP}'@'{h}'")
         cur.execute(f"DROP DATABASE IF EXISTS `{BASE}`")
     limpiar()
