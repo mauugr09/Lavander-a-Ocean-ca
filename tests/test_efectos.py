@@ -135,9 +135,11 @@ def test_interruptores_en_configuracion(conn, admin):
         configuracion.establecer(conn, admin, "interfaz_sonidos", "tal vez")
 
 
-def test_pantalla_de_carga_espera_en_hilo_y_devuelve_errores():
+def test_pantalla_de_carga_espera_en_hilo_y_devuelve_errores(monkeypatch):
     preparar_aplicacion()
+    from oceanica.app import carga
     from oceanica.app.carga import PantallaCarga, iniciar_pantalla_carga
+    monkeypatch.setattr(carga, "MINIMO_VISIBLE", 0.0)
     assert iniciar_pantalla_carga() is None                # sin pantalla (pruebas) no se muestra
     p = PantallaCarga()
     assert p.esperar("Conectando…", lambda a, b: a + b, 2, 3) == 5 and p.texto == "Conectando…"
@@ -146,10 +148,19 @@ def test_pantalla_de_carga_espera_en_hilo_y_devuelve_errores():
         raise ValueError("sin base")
     with pytest.raises(ValueError, match="sin base"):
         p.esperar("Revisando…", falla)
+    # el llenado del logo sigue el avance real, nunca retrocede, y al cerrar llega al 100 %
+    p.avance(0.6)
+    p.avance(0.3)
+    assert p.objetivo == 0.6
+    QTest.qWait(400)
+    assert 0 < p.progreso <= 0.6
     p.show()
     p.cerrar()
-    QTest.qWait(400)
+    assert p.progreso == 1.0
+    QTest.qWait(500)
     assert not p.isVisible()
+    img = p.grab()                                         # se dibuja sin errores (burbuja, logo, burbujas)
+    assert not img.isNull()
 
 
 def test_entrada_admin_avisa_y_sacude_en_error(conn, admin, monkeypatch):
