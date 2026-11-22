@@ -1,15 +1,13 @@
 """Catálogo de servicios y precios (administrador)."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox,
+from PySide6.QtWidgets import (QComboBox, QDialog, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox,
                                QPushButton, QVBoxLayout, QWidget)
 
-from ..servicios import carga_inicial, catalogo
-from . import tema
+from ..servicios import catalogo
+from . import importacion, tema
 from .dialogos import _botones
 from .util import a_decimal, crear_tabla, dinero, etiqueta, id_seleccionado, poblar, seguro
 
@@ -141,20 +139,8 @@ class CatalogoView(QWidget):
             self.al_mostrar()
 
     def plantilla(self):
-        ruta, _ = QFileDialog.getSaveFileName(self, "Guardar plantilla", str(Path.home() / "plantilla_servicios.csv"), "CSV (*.csv)")
-        if ruta and seguro(self, carga_inicial.generar_plantilla, "servicios", ruta)[0]:
-            QMessageBox.information(self, "Oceánica", "Plantilla guardada. Ábrela en Excel, llénala y guárdala como CSV o Excel.")
+        importacion.descargar_plantilla(self, "servicios")
 
     def importar(self):
-        ruta, _ = QFileDialog.getOpenFileName(self, "Elegir archivo", str(Path.home()), "Excel o CSV (*.xlsx *.csv)")
-        if not ruta:
-            return
-        ok, r = seguro(self, carga_inicial.importar, self.ctx.conn, self.ctx.admin, "servicios", ruta)
-        if not ok:
-            return
-        if r["errores"]:
-            detalle = "\n".join(f"Fila {f}: {m}" for f, m in r["errores"][:15])
-            QMessageBox.warning(self, "Archivo con errores", f"No se importó nada. Corrige estas filas:\n\n{detalle}")
-            return
-        QMessageBox.information(self, "Importación", f"{r['insertados']} servicio(s) nuevos, {r['omitidos']} ya existían.")
-        self.al_mostrar()
+        if importacion.importar_archivo(self, self.ctx, "servicios"):
+            self.al_mostrar()
