@@ -20,8 +20,11 @@ def _ejecutar() -> int:
         modulo = importlib.import_module(f"oceanica.{COMANDOS[sys.argv[1]]}")
         sys.argv = [sys.argv[0], *sys.argv[2:]]
         return modulo.main() or 0
+    # La pantalla de carga sale antes de importar el resto del programa (que es lo que más tarda en abrir)
+    from oceanica.app.carga import iniciar_pantalla_carga
+    pantalla = iniciar_pantalla_carga()
     from oceanica.app.aplicacion import main
-    return main()
+    return main(pantalla)
 
 
 if __name__ == "__main__":

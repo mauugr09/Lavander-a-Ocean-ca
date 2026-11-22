@@ -15,6 +15,7 @@ from ..config import CARPETA_LOGS, RUTA_CONFIG, cargar_config
 from ..db import conectar
 from . import tema
 from .contexto import Contexto
+from .efectos import efectos
 from .ventana import Ventana
 
 RECURSOS = Path(__file__).parent / "recursos"
@@ -66,15 +67,22 @@ def preparar_aplicacion() -> QApplication:
     return app
 
 
-def actualizar_al_abrir(cfg) -> bool:
+def _esperar(pantalla, texto, fn, *args):
+    """Con pantalla de carga, la espera corre en un hilo y la animación sigue; sin ella (pruebas), directo."""
+    return pantalla.esperar(texto, fn, *args) if pantalla is not None else fn(*args)
+
+
+def actualizar_al_abrir(cfg, pantalla=None) -> bool:
     """Si la versión nueva del programa trae cambios para la base, los aplica solos (con respaldo previo), para que
     nadie tenga que correr «migrar». Devuelve False si no se pudo: el programa no debe abrir con la base a medias."""
     from .. import migrar
     log = logging.getLogger("oceanica")
     try:
-        r = migrar.actualizar(cfg)
+        r = _esperar(pantalla, "Revisando que la base de datos esté al día…", migrar.actualizar, cfg)
     except migrar.ErrorActualizacion as e:
         log.error("No se pudo actualizar la base al abrir: %s", e)
+        if pantalla is not None:
+            pantalla.hide()
         QMessageBox.critical(None, "Oceánica Gestión",
                              "El programa se actualizó, pero no pudo poner al día la base de datos, así que no se abrirá "
                              "para no arriesgar la información.\n\n"
@@ -86,22 +94,30 @@ def actualizar_al_abrir(cfg) -> bool:
     return True
 
 
-def main() -> int:
+def main(pantalla=None) -> int:
+    """`pantalla`: la pantalla de carga que ya se mostró en `__main__` (None en las pruebas)."""
     _configurar_log()
     app = preparar_aplicacion()
+    efectos.instalar(app)
     cfg = cargar_config()
     if not RUTA_CONFIG.exists() and not cfg.password:
         # Primera vez en esta computadora: el asistente crea la base y la cuenta de la encargada, sin consola.
         from .asistente import AsistenteInstalacion
+        if pantalla is not None:
+            pantalla.hide()
         asistente = AsistenteInstalacion()
         if not asistente.exec() or not asistente.resultado:
             return 1
         cfg = asistente.resultado["cfg"]
+        if pantalla is not None:
+            pantalla.show()
     try:
-        conn = conectar(cfg)
+        conn = _esperar(pantalla, "Conectando con la base de datos…", conectar, cfg)
     except mysql.connector.Error:
         # Sistema ya instalado que hoy no conecta: lo ve el empleado al abrir. El detalle técnico va al registro.
         logging.getLogger("oceanica").exception("No se pudo conectar con la base de datos al iniciar")
+        if pantalla is not None:
+            pantalla.hide()
         QMessageBox.critical(None, "Oceánica Gestión",
                              "No se pudo abrir el sistema porque la base de datos no responde.\n\n"
                              "1. Cierre este aviso y reinicie la computadora.\n"
@@ -109,10 +125,15 @@ def main() -> int:
                              "Si sigue igual, avise a la encargada: el detalle quedó en la carpeta logs.\n"
                              "Mientras tanto, anote las órdenes en papel.")
         return 1
-    if not actualizar_al_abrir(cfg):
+    if not actualizar_al_abrir(cfg, pantalla):
         conn.close()
         return 1
+    if pantalla is not None:
+        pantalla.mensaje("Preparando las pantallas…")
+    efectos.configurar_desde(conn)
     ctx = Contexto(conn, cfg)
     ventana = Ventana(ctx)
     ventana.showMaximized()
+    if pantalla is not None:
+        pantalla.cerrar(ventana)
     return app.exec()

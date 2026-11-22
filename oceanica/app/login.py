@@ -1,20 +1,36 @@
 """Pantalla de entrada: mostrador (sin contraseña; cada acción pide PIN) o administrador."""
 from __future__ import annotations
 
+import logging
+import sys
 from pathlib import Path
 
+import mysql.connector
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QStyle, QStyleOption,
                                QVBoxLayout, QWidget)
 
 from .burbujas import Burbujas
+from .efectos import efectos
 from .iconos import poner
 from ..seguridad import ErrorAcceso, iniciar_sesion
 from ..servicios import usuarios
 from .util import etiqueta, seguro, tarjeta
 
 RECURSOS = Path(__file__).parent / "recursos"
+log = logging.getLogger("oceanica")
+
+
+def bloq_mayus_activado() -> bool:
+    """Solo se puede saber en Windows; en otros sistemas se supone apagado."""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        return bool(ctypes.windll.user32.GetKeyState(0x14) & 1)
+    except Exception:
+        return False
 
 
 def logo(tam: int) -> QPixmap:
@@ -46,7 +62,7 @@ class LoginView(QWidget):
         col.addWidget(sub)
         col.addSpacing(18)
 
-        card = tarjeta()
+        card = self.card = tarjeta()
         card.setFixedWidth(460)
         cl = QVBoxLayout(card)
         cl.setContentsMargins(22, 22, 22, 22)
@@ -64,9 +80,11 @@ class LoginView(QWidget):
         self.password = QLineEdit()
         self.password.setPlaceholderText("Contraseña")
         self.password.setEchoMode(QLineEdit.Password)
+        self.mayus = etiqueta("Bloq Mayús está activado: la contraseña distingue mayúsculas.", "error", True)
+        self.mayus.hide()
         self.msg = etiqueta("", "error", True)
         self.b_admin = QPushButton("Entrar como administrador")
-        for w in (self.usuario, self.password, self.msg, self.b_admin):
+        for w in (self.usuario, self.password, self.mayus, self.msg, self.b_admin):
             cl.addWidget(w)
         col.addWidget(card, 0, Qt.AlignHCenter)
         col.addStretch(2)
@@ -77,6 +95,11 @@ class LoginView(QWidget):
         self.b_admin.clicked.connect(self._admin)
         self.usuario.returnPressed.connect(self.password.setFocus)
         self.password.returnPressed.connect(self._admin)
+        self.password.textEdited.connect(lambda *_: self._revisar_mayus())
+        self.usuario.textEdited.connect(lambda *_: self._revisar_mayus())
+
+    def _revisar_mayus(self):
+        self.mayus.setVisible(bloq_mayus_activado())
 
     # ---- burbujas del fondo
     def paintEvent(self, e):
@@ -100,19 +123,35 @@ class LoginView(QWidget):
         self.usuario.clear()
         self.password.clear()
         self.msg.setText("")
+        self.mayus.hide()
         self.b_mostrador.setFocus()
 
+    def _error(self, texto: str):
+        self.msg.setText(texto)
+        self.password.clear()
+        self.password.setFocus()
+        efectos.reproducir("error")
+        efectos.sacudir(self.card)
+
     def _admin(self):
+        if not self.usuario.text().strip() or not self.password.text():
+            self._error("Escriba su usuario y su contraseña.")
+            return
         try:
             s = iniciar_sesion(self.ctx.conn, self.usuario.text(), self.password.text())
         except ErrorAcceso as e:
-            self.msg.setText(str(e))
-            self.password.clear()
-            self.password.setFocus()
+            mensaje = str(e)
+            if bloq_mayus_activado():
+                mensaje += " Revise que Bloq Mayús esté apagado."
+            self._error(mensaje)
+            return
+        except mysql.connector.Error:
+            log.exception("Error de base de datos al entrar como administrador")
+            self._error("No se pudo revisar la cuenta porque la base de datos no responde. "
+                        "Reinicie la computadora y vuelva a intentar.")
             return
         if s["rol"] != "administrador":
-            self.msg.setText("Esta cuenta no es de administrador. Los empleados entran por el mostrador con su PIN.")
-            self.password.clear()
+            self._error("Esta cuenta no es de administrador. Los empleados entran por el mostrador con su PIN.")
             return
         if s["debe_cambiar_password"] and not self._cambiar(s):
             return
@@ -121,7 +160,7 @@ class LoginView(QWidget):
 
     def _cambiar(self, s: dict) -> bool:
         actual = self.password.text()
-        nueva, ok = QInputDialog.getText(self, "Contraseña nueva", "Debes elegir una contraseña nueva (mínimo 8 caracteres, "
+        nueva, ok = QInputDialog.getText(self, "Contraseña nueva", "Elija una contraseña nueva (mínimo 8 caracteres, "
                                          "no solo números):", QLineEdit.Password)
         if not ok:
             return False

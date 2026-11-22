@@ -5,10 +5,12 @@ from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QMessageBox, QPushButt
 
 from .. import respaldos
 from ..servicios import configuracion
+from .efectos import efectos
 from .util import crear_tabla, etiqueta, id_seleccionado, poblar, seguro
 
 OPCIONES = {"entrega_requiere_pago_total": ("si", "no"), "asistencia_paga_justificada": ("si", "no"),
-            "entrega_transferencia_pendiente": ("no", "admin", "todos"), "ticket_logo": ("si", "no")}
+            "entrega_transferencia_pendiente": ("no", "admin", "todos"), "ticket_logo": ("si", "no"),
+            "interfaz_sonidos": ("si", "no"), "interfaz_animaciones": ("si", "no")}
 MULTILINEA = {"ticket_condiciones": "Una condición por renglón.", "ticket_almacenaje": ""}
 
 
@@ -72,6 +74,8 @@ class ConfigView(QWidget):
         else:
             valor, ok = QInputDialog.getText(self, "Cambiar ajuste", f["descripcion"] or clave, text=f["valor"])
         if ok and seguro(self, configuracion.establecer, self.ctx.conn, self.ctx.admin, clave, valor)[0]:
+            if clave.startswith("interfaz_"):
+                efectos.configurar_desde(self.ctx.conn)   # sin reiniciar el programa
             self.al_mostrar()
 
     def respaldar(self):

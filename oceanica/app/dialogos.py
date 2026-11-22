@@ -6,6 +6,7 @@ from PySide6.QtGui import QDesktopServices, QFont, QPixmap, QRegularExpressionVa
 from PySide6.QtWidgets import (QButtonGroup, QComboBox, QDialog, QLabel, QDialogButtonBox, QFormLayout, QHBoxLayout, QLineEdit,
                                QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout)
 
+from .efectos import efectos
 from ..config import RAIZ
 from ..seguridad import ErrorAcceso, autenticar_pin
 from ..servicios import facturacion, tickets, usuarios
@@ -124,6 +125,8 @@ class PinDialog(QDialog):
             self.msg.setText(str(e))
             self.pin.clear()
             self.pin.setFocus()
+            efectos.reproducir("error")
+            efectos.sacudir(self.pin)
             return
         self.accept()
 
@@ -249,6 +252,7 @@ class ClienteDialog(QDialog):
 
 class TicketDialog(QDialog):
     """Vista previa del ticket con impresión directa (Windows) o PDF."""
+    sonido_al_abrir = "exito"   # aparece al terminar una orden o un cobro
 
     def __init__(self, parent, texto: str, nombre_pdf: str, titulo: str = "Ticket", imprimir=None, logo: bool = False):
         super().__init__(parent)
