@@ -77,6 +77,8 @@ detalle y el comando exacto para regresar a como estaba. Para soporte técnico s
 
 ## Instalación en la PC del local
 
+Guía paso a paso con el instalador (sin Python): [`INSTALAR_EN_MI_PC.md`](INSTALAR_EN_MI_PC.md).
+
 1. Instalar MariaDB 10.11 LTS o MySQL 8 como servicio de Windows y agregar su carpeta `bin` al PATH.
 2. `pip install -r requirements.txt`
 3. Primera vez: `python -m oceanica.init_db` (pide la contraseña de root una sola vez y no la guarda; el sistema nunca usa root). Si la base y `oceanica_app` ya existen: `python -m oceanica.configurar`. La configuración queda en `%APPDATA%\OceanicaGestion`, fuera de la carpeta del programa.
