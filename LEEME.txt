@@ -1,0 +1,16 @@
+﻿LAVANDERÍA OCEÁNICA - CÓMO INSTALAR
+
+1. Doble clic en Instalar_Oceanica.exe.
+   Si Windows dice «Windows protegió su PC»: Más información > Ejecutar de todos modos.
+2. Siguiente > Instalar. Si la computadora no tiene base de datos, también instala MariaDB
+   (tarda uno o dos minutos). Si ya tiene una, la usa y no la toca.
+3. Deje marcada «Abrir Lavandería Oceánica» y presione Finalizar.
+4. La primera vez aparece un asistente. Escriba el usuario y la contraseña de la encargada
+   y una contraseña de recuperación. ANÓTELA EN PAPEL: solo sirve si la encargada olvida la suya.
+   Si la computadora ya tenía MariaDB, le pide la contraseña de root que ya tenía.
+5. Presione Instalar y entre con el usuario de la encargada.
+
+Desde la segunda vez, basta con abrir «Lavandería Oceánica» desde el escritorio.
+Para actualizar: ejecute el instalador nuevo encima; sus datos se conservan.
+
+Si algo falla, el detalle queda en %APPDATA%\OceanicaGestion\logs\oceanica.log

@@ -2,6 +2,8 @@
 #   - pruebas:  toda la suite contra MariaDB 10.3 (la rama del servidor del negocio) y 10.11 (la recomendada).
 #   - windows:  genera Oceanica.exe / OceanicaAdmin.exe y el instalador, comprueba que arrancan y los deja
 #               como archivos descargables de la ejecución (pestaña Actions -> la ejecución -> Artifacts).
+#   - publicar: solo en main y con todo en verde, publica Oceanica_Gestion.zip (instalador + LEEME) como release.
+#               Enlace fijo: https://github.com/mauugr09/Lavander-a-Ocean-ca/releases/latest
 # No prueba la impresora ni la PC del local: eso sigue siendo una verificación en sitio.
 name: CI
 
@@ -181,3 +183,31 @@ jobs:
           path: dist/Oceanica
           if-no-files-found: error
           retention-days: 14
+
+  publicar:
+    name: Publicar el zip del programa
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [pruebas, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Instalar_Oceanica
+          path: paquete
+      - name: Armar Oceanica_Gestion.zip
+        run: |
+          cp LEEME.txt paquete/
+          cd paquete && zip -9 ../Oceanica_Gestion.zip Instalar_Oceanica.exe LEEME.txt && cd ..
+          unzip -l Oceanica_Gestion.zip
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          etiqueta="v1.2.${{ github.run_number }}"
+          gh release create "$etiqueta" Oceanica_Gestion.zip --target "${{ github.sha }}" --latest \
+            --title "Oceánica Gestión $etiqueta" \
+            --notes "Instalador de Windows (incluye MariaDB). Descomprima y lea LEEME.txt. Commit ${{ github.sha }}."
