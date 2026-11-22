@@ -147,23 +147,9 @@ class OrdenesView(QWidget):
         self._mostrar_detalle()
 
     def _enter_en_busqueda(self):
-        """Enter en la búsqueda (también el lector de código de barras, que escribe el folio y Enter): si es el folio
-        exacto de una orden que no está en el filtro actual (por ejemplo, ya entregada), se busca en todas."""
-        texto = self.buscar.text().strip().upper()
-        if texto and not self._fila_de_folio(texto) and self.filtro.currentData() != "todas":
-            self.filtro.setCurrentIndex(self.filtro.findData("todas"))   # recarga con el mismo texto
-        fila = self._fila_de_folio(texto)
-        if fila is None and self.tabla.rowCount():
-            fila = 0
-        if fila is not None:
-            self.tabla.selectRow(fila)
+        if self.tabla.rowCount():
+            self.tabla.selectRow(0)
             self.tabla.setFocus()
-
-    def _fila_de_folio(self, folio: str) -> int | None:
-        for r in range(self.tabla.rowCount()):
-            if self.tabla.item(r, 0) and self.tabla.item(r, 0).text().upper() == folio:
-                return r
-        return None
 
     # -------------------------------------------------------------- detalle
     def _mostrar_detalle(self):

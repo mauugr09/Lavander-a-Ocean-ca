@@ -8,8 +8,7 @@ from ..servicios import configuracion
 from .util import crear_tabla, etiqueta, id_seleccionado, poblar, seguro
 
 OPCIONES = {"entrega_requiere_pago_total": ("si", "no"), "asistencia_paga_justificada": ("si", "no"),
-            "entrega_transferencia_pendiente": ("no", "admin", "todos"), "ticket_logo": ("si", "no"),
-            "codigo_barras": ("si", "no")}
+            "entrega_transferencia_pendiente": ("no", "admin", "todos"), "ticket_logo": ("si", "no")}
 MULTILINEA = {"ticket_condiciones": "Una condición por renglón.", "ticket_almacenaje": ""}
 
 
