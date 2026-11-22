@@ -36,7 +36,7 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 | `oceanica/app/` | Interfaz PySide6: entrada, mostrador, órdenes, caja, asistencia, clientes, inventario y, para el administrador, panel, reportes, nómina, servicios y precios, empleados, transferencias y configuración |
 | `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG y animación de la entrada |
 | `oceanica/app/recursos/` | Logo, ícono e íconos de línea (Tabler Icons, licencia MIT) |
-| `tests/` | 216 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
+| `tests/` | 219 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
 
 ## Notas de actualización
 
@@ -46,6 +46,11 @@ programa no abre (para no trabajar con la base a medias), avisa que se llame a l
 detalle y el comando exacto para regresar a como estaba. Para soporte técnico sigue existiendo
 `OceanicaAdmin.exe migrar` (con `--sin-respaldo` solo si el respaldo previo no se puede hacer y ya hay otro de hoy).
 
+- **Migración 014 («cobrado» solo con pagos confirmados).** Regla del cliente: una transferencia está «por confirmar»
+  hasta que la encargada la revisa en el banco. Antes, Reportes y el Panel la sumaban como cobrada desde que se
+  registraba, y una rechazada inflaba el día en que se cobró. Ahora «cobrado» solo cuenta pagos confirmados; lo
+  pendiente aparece aparte («$X en transferencias por confirmar»). Por eso, en periodos ya pasados, «cobrado» puede
+  bajar respecto a lo que se veía antes: es la cifra correcta.
 - **El programa se actualiza solo al abrir; respaldo diario programado; recuperar la contraseña de la encargada.** El instalador programa el respaldo diario en el Programador de tareas (`OceanicaAdmin.exe
   programar-respaldo`): a la hora de `respaldo_hora` (21:00) y, si la computadora estaba apagada, en cuanto se
   enciende. Nuevo `OceanicaAdmin.exe restablecer-admin` (menú Inicio → «Restablecer contraseña de administrador»): pone

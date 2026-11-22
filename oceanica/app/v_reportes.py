@@ -169,7 +169,9 @@ class ReportesView(QWidget):
             self.kpi["kilos"].setText(f"{r['kilos']:,.1f} kg")
             self.kpi["por_cobrar"].setText(dinero(r["por_cobrar"]))
             self.lb_alerta.setText(f"{r['ordenes_abiertas']} orden(es) abiertas, {r['ordenes_retrasadas']} con entrega vencida · "
-                                   f"{r['clientes_nuevos']} cliente(s) nuevos en el periodo")
+                                   f"{r['clientes_nuevos']} cliente(s) nuevos en el periodo"
+                                   + (f" · {dinero(r['por_confirmar'])} en transferencias por confirmar (todavía no cuentan "
+                                      "como cobrado)" if r["por_confirmar"] else ""))
         _, fn, usa_rango, usa_sesion = REPORTES[self.selector.currentIndex()]
         args = ((self.ctx.admin,) if usa_sesion else ()) + ((d, h) if usa_rango else ())
         ok, rep = seguro(self, fn, self.ctx.conn, *args)

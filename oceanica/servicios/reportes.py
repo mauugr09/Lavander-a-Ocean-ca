@@ -306,10 +306,14 @@ def resumen_general(conn, desde, hasta) -> dict:
     nuevos = _consulta(conn, "SELECT COUNT(*) AS n FROM clientes WHERE DATE(creado_en) BETWEEN %s AND %s", (d, h))[0]["n"]
     abiertas = _consulta(conn, "SELECT COUNT(*) AS n, COALESCE(SUM(dias_retraso > 0),0) AS retrasadas FROM v_ordenes_pendientes")[0]
     por_cobrar = _consulta(conn, "SELECT COALESCE(SUM(saldo),0) AS s FROM v_saldo_ordenes WHERE saldo > 0")[0]["s"]
+    # transferencias registradas que la encargada todavía no confirma en el banco: no son «cobrado» (migración 014)
+    por_confirmar = _consulta(conn, "SELECT COALESCE(SUM(monto),0) AS t FROM pagos "
+                                    "WHERE estado_confirmacion = 'pendiente' AND tipo <> 'reembolso'")[0]["t"]
     n_ordenes, vendido = int(o["ordenes"]), Decimal(o["vendido"])
     return {
         "desde": d, "hasta": h, "ordenes": n_ordenes, "vendido": vendido, "cobrado": Decimal(cobrado),
         "ticket_promedio": (vendido / n_ordenes).quantize(Decimal("0.01")) if n_ordenes else CERO,
         "kilos": Decimal(kilos), "clientes_nuevos": int(nuevos), "ordenes_abiertas": int(abiertas["n"]),
         "ordenes_retrasadas": int(abiertas["retrasadas"]), "por_cobrar": Decimal(por_cobrar),
+        "por_confirmar": Decimal(por_confirmar),
     }
