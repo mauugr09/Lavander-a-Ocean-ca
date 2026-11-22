@@ -67,9 +67,14 @@ def preparar_aplicacion() -> QApplication:
     return app
 
 
-def _esperar(pantalla, texto, fn, *args):
-    """Con pantalla de carga, la espera corre en un hilo y la animación sigue; sin ella (pruebas), directo."""
-    return pantalla.esperar(texto, fn, *args) if pantalla is not None else fn(*args)
+def _esperar(pantalla, texto, fn, *args, avance: float = 0.0):
+    """Con pantalla de carga, la espera corre en un hilo y la animación sigue; sin ella (pruebas), directo.
+    `avance`: cuánto del logo queda lleno al terminar este paso (0 a 1)."""
+    if pantalla is None:
+        return fn(*args)
+    resultado = pantalla.esperar(texto, fn, *args)
+    pantalla.avance(avance)
+    return resultado
 
 
 def actualizar_al_abrir(cfg, pantalla=None) -> bool:
@@ -78,7 +83,8 @@ def actualizar_al_abrir(cfg, pantalla=None) -> bool:
     from .. import migrar
     log = logging.getLogger("oceanica")
     try:
-        r = _esperar(pantalla, "Revisando que la base de datos esté al día…", migrar.actualizar, cfg)
+        r = _esperar(pantalla, "Revisando que la base de datos esté al día…", migrar.actualizar, cfg,
+                     avance=0.72)
     except migrar.ErrorActualizacion as e:
         log.error("No se pudo actualizar la base al abrir: %s", e)
         if pantalla is not None:
@@ -112,7 +118,7 @@ def main(pantalla=None) -> int:
         if pantalla is not None:
             pantalla.show()
     try:
-        conn = _esperar(pantalla, "Conectando con la base de datos…", conectar, cfg)
+        conn = _esperar(pantalla, "Conectando con la base de datos…", conectar, cfg, avance=0.45)
     except mysql.connector.Error:
         # Sistema ya instalado que hoy no conecta: lo ve el empleado al abrir. El detalle técnico va al registro.
         logging.getLogger("oceanica").exception("No se pudo conectar con la base de datos al iniciar")
@@ -129,7 +135,7 @@ def main(pantalla=None) -> int:
         conn.close()
         return 1
     if pantalla is not None:
-        pantalla.mensaje("Preparando las pantallas…")
+        pantalla.mensaje("Preparando las pantallas…", avance=0.9)
     efectos.configurar_desde(conn)
     ctx = Contexto(conn, cfg)
     ventana = Ventana(ctx)

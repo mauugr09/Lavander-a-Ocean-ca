@@ -150,7 +150,8 @@ Ventas por día, por semana y por mes, cobros por método de pago, ventas por se
 ### Interfaz
 Letra grande, botones amplios con íconos, trato de «usted», textos estándar de Qt en español y colores claros aunque Windows esté en modo oscuro. La entrada tiene burbujas animadas a los lados.
 
-- **Pantalla de carga** al abrir: sale antes de cargar el resto del programa y avisa en qué va (conectando, revisando
+- **Pantalla de carga** al abrir: el logo dentro de una burbuja de jabón iridiscente que ondula y se va llenando conforme
+  avanza la carga real, con burbujas subiendo al fondo (todo dibujado con QPainter). Avisa en qué va (conectando, revisando
   la base, preparando pantallas). Conectar y poner la base al día corren en segundo plano para que no se congele.
 - **Sonidos** cortos y suaves: clic en botones, éxito (avisos de «Listo», ticket al terminar un cobro), error y la
   entrada al sistema. No suena cada tecla, a propósito: en un mostrador cansa. Interruptor `interfaz_sonidos` en
