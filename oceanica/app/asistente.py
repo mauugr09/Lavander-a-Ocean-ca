@@ -94,7 +94,8 @@ class AsistenteInstalacion(QDialog):
         else:
             self.aviso.setText("Esta computadora ya tiene una base de datos. Escriba su contraseña de root "
                                "(no se guarda) y los datos de la encargada.")
-            self.nota.setText("Si en esa base ya existe una encargada, se conserva y los datos de arriba no se usan.")
+            self.nota.setText("Si esa cuenta ya existe en la base (de una instalación anterior), se le pone la "
+                              "contraseña que escriba aquí y se desbloquea.")
 
     def instalar(self) -> None:
         if self.clave.text() != self.clave2.text():
@@ -117,9 +118,11 @@ class AsistenteInstalacion(QDialog):
             QMessageBox.critical(self, "Oceánica", "No se pudo terminar la instalación. "
                                  "El detalle quedó en la carpeta logs.")
             return
-        if self.resultado["admin_creado"]:
-            texto = f"Listo. Entre con el usuario «{self.usuario.text().strip()}» y su contraseña."
+        usuario = self.usuario.text().strip()
+        if self.resultado["cuenta"] == "creada":
+            texto = f"Listo. Entre como administrador con el usuario «{usuario}» y la contraseña que eligió."
         else:
-            texto = "Listo. La base ya tenía una encargada: entre con su usuario de siempre."
+            texto = (f"Listo. La cuenta «{usuario}» ya existía en esta base: se le puso la contraseña que acaba de "
+                     "escribir y quedó desbloqueada. Entre con ella.")
         QMessageBox.information(self, "Oceánica", texto)
         self.accept()

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QListWidget, QListWi
 from .. import respaldos
 from ..servicios import caja, configuracion
 from .iconos import icono
+from .efectos import efectos
 from .login import LoginView, logo
 from .util import chip, etiqueta, fecha_hora
 from .v_asistencia import AsistenciaView
@@ -93,6 +94,7 @@ class Ventana(QMainWindow):
             self.shell, self.paginas = None, []
         self.pila.setCurrentWidget(self.login)
         self.login.al_mostrar()
+        efectos.aparecer(self.login)
 
     def abrir_shell(self, sesion_admin):
         self.ctx.admin = sesion_admin
@@ -150,8 +152,11 @@ class Ventana(QMainWindow):
         raiz.addLayout(der, 1)
 
         self.nav.currentRowChanged.connect(self._cambiar_pagina)
+        self.nav.itemClicked.connect(lambda *_: efectos.reproducir("clic"))
         self.pila.addWidget(self.shell)
         self.pila.setCurrentWidget(self.shell)
+        efectos.aparecer(self.shell)
+        efectos.reproducir("entrada")
         self.nav.setCurrentRow(0)
         self.timer_caja.start(20000)
         self.refrescar_estado()
@@ -164,6 +169,7 @@ class Ventana(QMainWindow):
         if 0 <= fila < len(self.paginas):
             self.contenido.setCurrentIndex(fila)
             self.paginas[fila].al_mostrar()
+            efectos.aparecer(self.contenido.currentWidget())
             self.refrescar_estado()
 
     def ir_a(self, titulo: str):

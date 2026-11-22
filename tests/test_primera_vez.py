@@ -91,21 +91,39 @@ def test_servidor_nuevo_queda_con_contrasena_y_listo_para_entrar(servidor_nuevo)
 
 
 @requiere_root
-def test_volver_a_instalar_conserva_a_la_encargada(servidor_nuevo):
+def test_volver_a_instalar_deja_funcionando_la_cuenta_que_se_escribe(servidor_nuevo):
+    """Caso real: la PC ya tenía una base de una instalación anterior con otra contraseña (o la cuenta bloqueada).
+    Quien tiene root manda sobre la base: la cuenta que escribe queda con esa contraseña y desbloqueada."""
+    from oceanica.seguridad import ErrorAcceso, iniciar_sesion
     primera = instalacion.instalar(root_actual="", nueva_root="Recupera#2026", **DATOS)
+    assert primera["cuenta"] == "creada"
+    conn = conectar(primera["cfg"])
+    for _ in range(5):                                     # se bloquea por intentos fallidos
+        with pytest.raises(ErrorAcceso):
+            iniciar_sesion(conn, "encargada", "mal")
+    conn.close()
+
     with pytest.raises(instalacion.ErrorInstalacion, match="no es correcta"):
         instalacion.instalar(root_actual="otra", nueva_root=None, **DATOS)
     segunda = instalacion.instalar(root_actual="Recupera#2026", nueva_root=None,
-                                   **{**DATOS, "usuario_admin": "otra", "password_admin": "OtraClave#1"})
-    assert not segunda["admin_creado"]
+                                   **{**DATOS, "password_admin": "NuevaClave#7"})
+    assert segunda["cuenta"] == "restablecida" and not segunda["admin_creado"]
     assert segunda["cfg"].password != primera["cfg"].password       # la clave del sistema se renueva
     with pytest.raises(mysql.connector.Error):
         conectar(primera["cfg"])
     conn = conectar(segunda["cfg"])
+    assert iniciar_sesion(conn, "encargada", "NuevaClave#7")["rol"] == "administrador"   # y ya no está bloqueada
     cur = conn.cursor()
-    cur.execute("SELECT usuario FROM usuarios")
-    assert cur.fetchall() == [("encargada",)]
+    cur.execute("SELECT COUNT(*) FROM usuarios")
+    assert cur.fetchone()[0] == 1                                    # no se duplicó la cuenta
+
+    # un nombre que ya es de un empleado no se convierte en administrador
+    from oceanica.seguridad import crear_usuario
+    crear_usuario(conn, "rosa", "ClaveRosa#1", "empleado")
     conn.close()
+    with pytest.raises(instalacion.ErrorInstalacion, match="empleado"):
+        instalacion.instalar(root_actual="Recupera#2026", nueva_root=None,
+                             **{**DATOS, "usuario_admin": "rosa", "password_admin": "OtraClave#1"})
 
 
 # ---------- la pantalla del asistente (Qt sin ventana) -------------------------------
@@ -161,5 +179,5 @@ def test_asistente_instala_de_punta_a_punta(qt, servidor_nuevo, monkeypatch):
     dlg.recuperacion2.setText("Recupera#2026")
     dlg.b_instalar.click()
     assert qt[-1][0] == "information" and "encargada" in qt[-1][1]
-    assert dlg.resultado["admin_creado"] and dlg.result() == QDialog.Accepted
+    assert dlg.resultado["cuenta"] == "creada" and dlg.result() == QDialog.Accepted
     conectar(dlg.resultado["cfg"]).close()

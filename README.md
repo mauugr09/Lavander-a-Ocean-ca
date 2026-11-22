@@ -37,7 +37,7 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 | `oceanica/app/` | Interfaz PySide6: entrada, mostrador, órdenes, caja, asistencia, clientes, inventario y, para el administrador, panel, reportes, nómina, servicios y precios, empleados, transferencias y configuración |
 | `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` · `importacion.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG, animación de la entrada y botones de importación desde Excel o CSV |
 | `oceanica/app/recursos/` | Logo, ícono e íconos de línea (Tabler Icons, licencia MIT) |
-| `tests/` | 230 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
+| `tests/` | 238 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
 
 ## Notas de actualización
 
@@ -47,6 +47,8 @@ programa no abre (para no trabajar con la base a medias), avisa que se llame a l
 detalle y el comando exacto para regresar a como estaba. Para soporte técnico sigue existiendo
 `OceanicaAdmin.exe migrar` (con `--sin-respaldo` solo si el respaldo previo no se puede hacer y ya hay otro de hoy).
 
+- **Migración 015 (sonidos y animaciones).** Agrega los ajustes `interfaz_sonidos` e `interfaz_animaciones`, los dos
+  en `si`. Se apagan en Configuración. Sin cambios de tablas.
 - **Migración 014 («cobrado» solo con pagos confirmados).** Regla del cliente: una transferencia está «por confirmar»
   hasta que la encargada la revisa en el banco. Antes, Reportes y el Panel la sumaban como cobrada desde que se
   registraba, y una rechazada inflaba el día en que se cobró. Ahora «cobrado» solo cuenta pagos confirmados; lo
@@ -84,6 +86,8 @@ detalle y el comando exacto para regresar a como estaba. Para soporte técnico s
   en una MariaDB recién instalada, una **contraseña de recuperación** (queda como contraseña de root; solo se usa
   para «Restablecer contraseña de administrador»). En una base que ya existía pide la contraseña de root actual.
   El asistente crea la base, el usuario `oceanica_app` y la cuenta de la encargada; root no se guarda en ningún lado.
+  Si la base ya existía (instalación anterior) y esa cuenta ya estaba, se le pone la contraseña que se escribió y se
+  desbloquea: así nunca se queda nadie fuera por una contraseña vieja que ya nadie recuerda.
 - Entre la instalación de MariaDB y la primera apertura, root queda sin contraseña (solo desde esta misma
   computadora). Por eso el instalador ofrece abrir el programa al terminar.
 - El respaldo diario queda programado y encuentra `mysqldump` en la carpeta de MariaDB aunque no esté en el PATH.
@@ -145,6 +149,16 @@ Ventas por día, por semana y por mes, cobros por método de pago, ventas por se
 
 ### Interfaz
 Letra grande, botones amplios con íconos, trato de «usted», textos estándar de Qt en español y colores claros aunque Windows esté en modo oscuro. La entrada tiene burbujas animadas a los lados.
+
+- **Pantalla de carga** al abrir: sale antes de cargar el resto del programa y avisa en qué va (conectando, revisando
+  la base, preparando pantallas). Conectar y poner la base al día corren en segundo plano para que no se congele.
+- **Sonidos** cortos y suaves: clic en botones, éxito (avisos de «Listo», ticket al terminar un cobro), error y la
+  entrada al sistema. No suena cada tecla, a propósito: en un mostrador cansa. Interruptor `interfaz_sonidos` en
+  Configuración (si/no; se aplica sin reiniciar). Solo en Windows.
+- **Animaciones**: brillo en el campo donde se escribe y un pulso por tecla, cambio de pantalla deslizándose, avisos
+  que aparecen suavemente y el recuadro de entrada (o el PIN) que tiembla si la contraseña es incorrecta.
+  Interruptor `interfaz_animaciones` (si/no), por si la computadora del local es lenta.
+- La entrada del administrador avisa si **Bloq Mayús** está activado.
 
 ## Reglas del negocio según el cliente
 

@@ -11,7 +11,8 @@ _NUMERICAS = {
     "nomina_salario_minimo_diario", "nomina_pago_hora_extra", "almacenaje_dias",
 }
 _TEXTOS_LARGOS = {"ticket_condiciones", "ticket_almacenaje"}
-_SI_NO = {"entrega_requiere_pago_total", "asistencia_paga_justificada", "horas_extra_automaticas", "ticket_logo"}
+_SI_NO = {"entrega_requiere_pago_total", "asistencia_paga_justificada", "horas_extra_automaticas", "ticket_logo",
+          "interfaz_sonidos", "interfaz_animaciones"}
 _OPCIONES = {"entrega_transferencia_pendiente": ("no", "admin", "todos")}
 
 

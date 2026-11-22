@@ -6,8 +6,10 @@ Dos casos:
 - **Servidor que ya existía** (por ejemplo, la MariaDB 10.3.9 del local): pide la contraseña de root actual.
 
 En los dos casos: crea la base y el usuario limitado `oceanica_app` (con una contraseña aleatoria que solo conoce
-config.ini), aplica las migraciones y crea la cuenta de la encargada si todavía no hay usuarios. La contraseña de
-root no se guarda en ningún lado.
+config.ini) y aplica las migraciones. La cuenta de la encargada que se escribe en el asistente **siempre queda
+funcionando**: si no existe se crea; si ya existía (una base de una instalación anterior) se le pone la contraseña
+nueva y se desbloquea. Quien tiene la contraseña de root ya manda sobre la base, así que no se abre ningún permiso
+nuevo. La contraseña de root no se guarda en ningún lado.
 """
 from __future__ import annotations
 
@@ -20,7 +22,7 @@ import mysql.connector
 from .config import ConfigDB, guardar_config
 from .db import aplicar_migraciones, conectar
 from .init_db import crear_base_y_usuario
-from .seguridad import crear_usuario, validar_politica
+from .seguridad import crear_usuario, hashear, registrar_auditoria, validar_politica
 
 log = logging.getLogger("oceanica")
 
@@ -103,14 +105,38 @@ def instalar(*, root_actual: str, nueva_root: str | None, usuario_admin: str, pa
     conn = conectar(cfg)
     try:
         aplicar_migraciones(conn)
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM usuarios")
-        admin_creado = cur.fetchone()[0] == 0
-        cur.close()
-        if admin_creado:
-            crear_usuario(conn, usuario_admin, password_admin, "administrador")
+        cuenta = _dejar_lista_la_encargada(conn, usuario_admin, password_admin)
     finally:
         conn.close()
     if guardar:
         guardar_config(cfg)
-    return {"cfg": cfg, "admin_creado": admin_creado}
+    return {"cfg": cfg, "cuenta": cuenta, "admin_creado": cuenta == "creada"}
+
+
+def _dejar_lista_la_encargada(conn, usuario: str, password: str) -> str:
+    """Devuelve 'creada' o 'restablecida'. Una cuenta de empleado con ese nombre no se toca."""
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT u.id, r.nombre FROM usuarios u JOIN roles r ON r.id = u.rol_id WHERE u.usuario = %s",
+                    (usuario,))
+        fila = cur.fetchone()
+    finally:
+        cur.close()
+    if not fila:
+        crear_usuario(conn, usuario, password, "administrador")
+        return "creada"
+    if fila[1] != "administrador":
+        raise ErrorInstalacion(f"«{usuario}» ya es la cuenta de un empleado. Elija otro usuario para la encargada.")
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE usuarios SET password_hash = %s, activo = 1, intentos_fallidos = 0, bloqueado_hasta = NULL, "
+                    "debe_cambiar_password = 0 WHERE id = %s", (hashear(password), fila[0]))
+        registrar_auditoria(cur, fila[0], "password_restablecido_instalacion", "usuarios", fila[0],
+                            "Desde el asistente de instalación (con la contraseña de root)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()
+    return "restablecida"
