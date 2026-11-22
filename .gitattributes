@@ -1,3 +1,4 @@
 # Los .bat de Windows deben ir con CRLF: con LF, cmd puede fallar en etiquetas y goto.
 *.bat text eol=crlf
 *.iss text eol=crlf
+*.txt -text
