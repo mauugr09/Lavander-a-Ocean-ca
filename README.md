@@ -35,9 +35,9 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 | `oceanica/datos_demo.py` | Datos de ejemplo para probar (nunca en la lavandería) |
 | `oceanica/servicios/` | Reglas de negocio: usuarios, configuración, clientes, catálogo, caja, órdenes, facturación (sin timbrado), inventario, empleados, nómina, reportes, panel, exportación, tickets y carga inicial |
 | `oceanica/app/` | Interfaz PySide6: entrada, mostrador, órdenes, caja, asistencia, clientes, inventario y, para el administrador, panel, reportes, nómina, servicios y precios, empleados, transferencias y configuración |
-| `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG y animación de la entrada |
+| `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` · `importacion.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG, animación de la entrada y botones de importación desde Excel o CSV |
 | `oceanica/app/recursos/` | Logo, ícono e íconos de línea (Tabler Icons, licencia MIT) |
-| `tests/` | 219 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
+| `tests/` | 223 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
 
 ## Notas de actualización
 
@@ -183,6 +183,11 @@ El sistema **no timbra**: la factura se emite en el portal del SAT o en el siste
 - clientes: `nombre, apellidos, telefono, email, notas`
 
 Es todo o nada: si una fila falla, no se guarda nada y se indica la fila con el error. Lo ya existente se omite.
+
+En pantalla, con la sesión de la encargada, hay botones «Descargar plantilla» e «Importar desde Excel o CSV» en
+**Servicios y precios**, **Clientes** e **Inventario**. Los empleados **no** se importan desde pantalla a propósito:
+la importación los crearía sin cuenta ni PIN y no podrían checar ni cobrar; se dan de alta uno por uno en
+«Empleados y usuarios», que pide el PIN.
 
 ## Datos de ejemplo (solo para probar)
 

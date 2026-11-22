@@ -775,3 +775,105 @@ def test_al_abrir_sin_base_el_aviso_es_para_el_empleado(qapp, monkeypatch, tmp_p
     monkeypatch.setattr(aplicacion, "cargar_config", lambda: ConfigDB(host="127.0.0.1", usuario="x", password="", base="z"))
     monkeypatch.setattr(aplicacion, "conectar", lambda cfg: pytest.fail("sin configuración no debe intentar conectar"))
     assert aplicacion.main() == 1 and "oceanica.init_db" in vistos[-1]
+
+
+# ---------- importación desde Excel o CSV en Clientes e Inventario ----------------
+
+def _csv_import(ruta, filas):
+    import csv
+    with open(ruta, "w", newline="", encoding="utf-8-sig") as f:
+        csv.writer(f).writerows(filas)
+    return ruta
+
+
+def _avisos(monkeypatch):
+    avisos = []
+    for tipo in ("information", "warning", "critical"):
+        monkeypatch.setattr(QMessageBox, tipo, lambda *a, _t=tipo, **k: avisos.append((_t, a[2])))
+    return avisos
+
+
+def test_importar_clientes_por_pantalla(qapp, conn, admin, empleado, tmp_path, monkeypatch):
+    from oceanica.app import importacion, v_clientes
+    avisos = _avisos(monkeypatch)
+
+    # en modo mostrador los botones de importación no se ven
+    ctx = Contexto(conn)
+    vista = v_clientes.ClientesView(ctx)
+    vista.al_mostrar()
+    assert vista.b_importar.isHidden() and vista.b_plantilla.isHidden()
+
+    ctx.admin = admin
+    vista.al_mostrar()
+    assert not vista.b_importar.isHidden() and not vista.b_plantilla.isHidden()
+
+    # plantilla: se guarda con las columnas esperadas
+    destino = tmp_path / "plantilla_clientes.csv"
+    monkeypatch.setattr(importacion.QFileDialog, "getSaveFileName", lambda *a, **k: (str(destino), ""))
+    vista.b_plantilla.click()
+    assert destino.read_text(encoding="utf-8-sig").strip() == "nombre,apellidos,telefono,email,notas"
+    assert "Ábrala" in avisos[-1][1]
+
+    # archivo con un error: no se guarda nada y el mensaje trata de usted
+    malo = _csv_import(tmp_path / "malo.csv", [["Nombre", "Teléfono", "Correo"], ["Ana", "5512345678", "sin-arroba"],
+                                              ["Beto", "5598765432", ""]])
+    monkeypatch.setattr(importacion.QFileDialog, "getOpenFileName", lambda *a, **k: (str(malo), ""))
+    vista.b_importar.click()
+    assert avisos[-1][0] == "warning" and "Corrija" in avisos[-1][1] and "Fila 2" in avisos[-1][1]
+    assert clientes.buscar_clientes(conn, "", True, 50) == []
+
+    # archivo correcto: se importan y la tabla se recarga; reimportar no duplica
+    bueno = _csv_import(tmp_path / "bueno.csv", [["Nombre", "Apellidos", "Teléfono"], ["Ana", "López", "5512345678"],
+                                                 ["Beto", "", "5598765432"]])
+    monkeypatch.setattr(importacion.QFileDialog, "getOpenFileName", lambda *a, **k: (str(bueno), ""))
+    vista.b_importar.click()
+    assert avisos[-1] == ("information", "2 cliente(s) nuevos, 0 ya existían.")
+    assert vista.tabla.rowCount() == 2
+    vista.b_importar.click()
+    assert avisos[-1] == ("information", "0 cliente(s) nuevos, 2 ya existían.")
+    assert vista.tabla.rowCount() == 2
+
+    # cancelar el diálogo de archivo no hace nada
+    n = len(avisos)
+    monkeypatch.setattr(importacion.QFileDialog, "getOpenFileName", lambda *a, **k: ("", ""))
+    vista.b_importar.click()
+    assert len(avisos) == n
+
+
+def test_importar_insumos_por_pantalla(qapp, conn, admin, tmp_path, monkeypatch):
+    from oceanica.app import importacion, v_inventario
+    from oceanica.servicios import inventario
+    avisos = _avisos(monkeypatch)
+    ctx = Contexto(conn)
+    vista = v_inventario.InventarioView(ctx)
+    vista.al_mostrar()
+    assert vista.b_importar.isHidden()          # el empleado no importa
+
+    ctx.admin = admin
+    vista.al_mostrar()
+    assert not vista.b_importar.isHidden()
+    archivo = _csv_import(tmp_path / "insumos.csv", [
+        ["categoria", "nombre", "unidad", "existencia", "minimo", "costo"],
+        ["Químicos", "Suavizante", "litro", "12", "5", "38.50"],
+        ["Químicos", "Cloro", "litro", "0", "2", "20"]])
+    monkeypatch.setattr(importacion.QFileDialog, "getOpenFileName", lambda *a, **k: (str(archivo), ""))
+    vista.b_importar.click()
+    assert avisos[-1] == ("information", "2 insumo(s) nuevos, 0 ya existían.")
+    assert vista.tabla.rowCount() == 2
+    suav = next(i for i in inventario.listar_insumos(conn, False, "Suavizante"))
+    assert suav["existencia"] == Decimal("12")
+
+
+def test_importar_servicios_sigue_funcionando(qapp, conn, admin, tmp_path, monkeypatch):
+    from oceanica.app import importacion, v_catalogo
+    avisos = _avisos(monkeypatch)
+    ctx = Contexto(conn)
+    ctx.admin = admin
+    vista = v_catalogo.CatalogoView(ctx)
+    vista.al_mostrar()
+    antes = vista.tabla.rowCount()
+    archivo = _csv_import(tmp_path / "s.csv", [["categoria", "nombre", "unidad", "precio"], ["Planchado", "Camisa", "pieza", "25"]])
+    monkeypatch.setattr(importacion.QFileDialog, "getOpenFileName", lambda *a, **k: (str(archivo), ""))
+    vista.b_importar.click()
+    assert avisos[-1] == ("information", "1 servicio(s) nuevos, 0 ya existían.")
+    assert vista.tabla.rowCount() == antes + 1

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBox
                                QPushButton, QVBoxLayout, QWidget)
 
 from ..servicios import inventario
-from . import tema
+from . import importacion, tema
 from .dialogos import _botones
 from .util import a_decimal, crear_tabla, dinero, etiqueta, fecha_hora, id_seleccionado, numero, poblar, seguro
 
@@ -114,14 +114,17 @@ class InventarioView(QWidget):
         for b in (self.b_entrada, self.b_salida, self.b_hist):
             botones.addWidget(b)
         botones.addStretch(1)
+        self.b_plantilla, self.b_importar = importacion.crear_botones(self, ctx, "insumos", self.recargar)
+        botones.addWidget(self.b_plantilla)
+        botones.addWidget(self.b_importar)
         botones.addWidget(self.b_ajuste)
         botones.addWidget(self.b_nuevo)
         lay.addLayout(botones)
         self.tabla = crear_tabla(["Insumo", "Categoría", "Existencia", "Mínimo", "Costo", "Proveedor", "Estado"],
                                  derecha=(2, 3, 4), estirar=0)
         lay.addWidget(self.tabla, 1)
-        self.b_nuevo.setVisible(ctx.es_admin)
-        self.b_ajuste.setVisible(ctx.es_admin)
+        for b in (self.b_nuevo, self.b_ajuste, self.b_plantilla, self.b_importar):
+            b.setVisible(ctx.es_admin)
         self.buscar.textChanged.connect(self.recargar)
         self.solo_bajos.toggled.connect(self.recargar)
         self.b_nuevo.clicked.connect(self.nuevo)
@@ -131,8 +134,8 @@ class InventarioView(QWidget):
         self.b_hist.clicked.connect(self.historial)
 
     def al_mostrar(self):
-        self.b_nuevo.setVisible(self.ctx.es_admin)
-        self.b_ajuste.setVisible(self.ctx.es_admin)
+        for b in (self.b_nuevo, self.b_ajuste, self.b_plantilla, self.b_importar):
+            b.setVisible(self.ctx.es_admin)
         self.recargar()
         self.buscar.setFocus()
 

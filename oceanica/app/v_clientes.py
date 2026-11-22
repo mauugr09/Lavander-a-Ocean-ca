@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
+from . import importacion
 from .iconos import en_buscador, poner
 from ..servicios import clientes
 from .dialogos import ClienteDialog
@@ -28,7 +29,13 @@ class ClientesView(QWidget):
         fila.addWidget(self.buscar, 1)
         fila.addWidget(self.b_nuevo)
         fila.addWidget(self.b_editar)
+        # Carga inicial de la lista de clientes (solo la encargada; el servicio también lo exige)
+        self.b_plantilla, self.b_importar = importacion.crear_botones(self, ctx, "clientes", self.recargar)
+        fila.addWidget(self.b_plantilla)
+        fila.addWidget(self.b_importar)
         lay.addLayout(fila)
+        for b in (self.b_plantilla, self.b_importar):   # ya con ventana padre: si no, Qt los abre sueltos
+            b.setVisible(ctx.es_admin)
         self.tabla = crear_tabla(["Nombre", "Teléfono", "Correo", "RFC", "Notas"], estirar=4)
         lay.addWidget(self.tabla, 3)
         self.lb_vacio = etiqueta("", "suave", True)
@@ -44,6 +51,8 @@ class ClientesView(QWidget):
         self.b_editar.clicked.connect(self.editar)
 
     def al_mostrar(self):
+        for b in (self.b_plantilla, self.b_importar):
+            b.setVisible(self.ctx.es_admin)
         self.recargar()
         self.buscar.setFocus()
 

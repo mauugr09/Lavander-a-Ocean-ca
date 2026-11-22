@@ -168,7 +168,7 @@ class PersonalView(QWidget):
                        dlg.apellidos.text(), dlg.ingreso.date().toPython(), dlg.pin.text(), dlg.telefono.text(), dlg.puesto.text())
         if ok:
             QMessageBox.information(self, "Empleado creado", f"Listo. Su PIN es {dlg.pin.text()}.\n"
-                                    "Pídele que lo cambie cuando quiera.")
+                                    "Pídale que lo cambie cuando quiera.")
             self.al_mostrar()
 
     def cambiar_pin(self):
