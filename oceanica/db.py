@@ -104,6 +104,22 @@ def listar_migraciones(carpeta: Path = CARPETA_MIGRACIONES) -> list[tuple[int, s
     return encontradas
 
 
+def migraciones_pendientes(conn, carpeta: Path = CARPETA_MIGRACIONES) -> tuple[list[int], bool]:
+    """(versiones por aplicar, ¿la base ya tenía migraciones?). Solo lee: no crea ni cambia nada.
+    Una base sin `schema_migraciones` es una instalación nueva (no hay datos que proteger)."""
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = DATABASE() AND table_name = 'schema_migraciones'")
+    existe = cur.fetchone()[0] > 0
+    hechas: set[int] = set()
+    if existe:
+        cur.execute("SELECT version FROM schema_migraciones")
+        hechas = {v for (v,) in cur.fetchall()}
+    cur.close()
+    conn.commit()
+    return [v for v, _, _ in listar_migraciones(carpeta) if v not in hechas], bool(hechas)
+
+
 def aplicar_migraciones(conn, carpeta: Path = CARPETA_MIGRACIONES) -> list[int]:
     """Aplica las migraciones pendientes en orden. Devuelve las versiones aplicadas.
 

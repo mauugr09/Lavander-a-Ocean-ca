@@ -225,7 +225,7 @@ class PanelView(QWidget):
         cuad.setSpacing(14)
         for i, (clave, texto) in enumerate([("vendido", "Vendido"), ("ordenes", "Órdenes"),
                                             ("ticket_promedio", "Promedio por orden"), ("kilos", "Kilos lavados"),
-                                            ("clientes_nuevos", "Clientes nuevos"), ("cobrado", "Cobrado")]):
+                                            ("clientes_nuevos", "Clientes nuevos"), ("cobrado", "Cobrado (confirmado)")]):
             celda = QVBoxLayout()
             celda.addWidget(etiqueta(texto, "suave"))
             self.datos[clave] = etiqueta("—", "titulo")
@@ -298,6 +298,8 @@ class PanelView(QWidget):
             self.datos["ordenes"].setText(f"{r['ordenes']:,}")
             self.datos["clientes_nuevos"].setText(str(r["clientes_nuevos"]))
             self.datos["kilos"].setText(f"{r['kilos']:,.1f} kg")
+            self.datos["cobrado"].setToolTip(f"Además hay {dinero(r['por_confirmar'])} en transferencias por confirmar "
+                                             "en el banco" if r["por_confirmar"] else "")
 
     # --------------------------------------------------------------- gráficas
     def _grafica_meses(self, meses: list[dict]):

@@ -5,10 +5,13 @@
     Oceanica.exe configurar   conecta a una base ya creada (sin root)
     Oceanica.exe instalar     crea la base, el usuario y el administrador (pide root una vez)
     Oceanica.exe respaldo     respaldo de la base (para el Programador de tareas): respaldo --auto
+    Oceanica.exe programar-respaldo  crea el respaldo diario en el Programador de tareas (--quitar lo elimina)
+    Oceanica.exe restablecer-admin   contraseña temporal para un administrador que no puede entrar (pide root)
 """
 import sys
 
-COMANDOS = {"migrar": "migrar", "configurar": "configurar", "instalar": "init_db", "respaldo": "respaldos"}
+COMANDOS = {"migrar": "migrar", "configurar": "configurar", "instalar": "init_db", "respaldo": "respaldos",
+            "restablecer-admin": "restablecer_admin", "programar-respaldo": "programar_respaldo"}
 
 
 def _ejecutar() -> int:

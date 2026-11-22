@@ -14,8 +14,7 @@ Cada quien trabaja con **su propia base de datos**; el repositorio solo lleva el
 
 ```
 git pull
-python -m oceanica.migrar      # aplica a SU base los cambios de estructura, sin borrar datos
-python -m oceanica
+python -m oceanica             # al abrir, pone SU base al día (con respaldo previo), sin borrar datos
 ```
 
 Primera vez en una computadora: `pip install -r requirements.txt` y `python -m oceanica.init_db` (ver «Instalación»).
@@ -28,8 +27,9 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 
 | Ruta | Contenido |
 |---|---|
-| `db/migrations/001..011` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente, categorías del mostrador, servicio a domicilio, textos del ticket, datos fiscales del cliente y banderas de factura en la orden |
-| `oceanica/init_db.py` · `configurar.py` · `migrar.py` | Instalación (crea la base, un usuario MySQL limitado y el primer administrador), conexión a una base existente y actualización |
+| `db/migrations/001..014` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente, categorías del mostrador, servicio a domicilio, textos del ticket, datos fiscales del cliente, banderas de factura en la orden, aviso de orden lista, días de almacenaje y «cobrado» solo con pagos confirmados |
+| `oceanica/init_db.py` · `configurar.py` · `migrar.py` | Instalación (crea la base, un usuario MySQL limitado y el primer administrador), conexión a una base existente y actualización (el programa la hace solo al abrir) |
+| `oceanica/programar_respaldo.py` · `restablecer_admin.py` | Respaldo diario en el Programador de tareas de Windows y contraseña temporal para un administrador que no puede entrar |
 | `oceanica/respaldos.py` | Respaldo `.sql.gz` con mysqldump, copia externa, retención y restauración |
 | `oceanica/seguridad.py` | bcrypt, política de contraseñas, PIN, bloqueo tras 5 intentos (15 min) y bitácora |
 | `oceanica/datos_demo.py` | Datos de ejemplo para probar (nunca en la lavandería) |
@@ -37,12 +37,25 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 | `oceanica/app/` | Interfaz PySide6: entrada, mostrador, órdenes, caja, asistencia, clientes, inventario y, para el administrador, panel, reportes, nómina, servicios y precios, empleados, transferencias y configuración |
 | `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG y animación de la entrada |
 | `oceanica/app/recursos/` | Logo, ícono e íconos de línea (Tabler Icons, licencia MIT) |
-| `tests/` | 165 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
+| `tests/` | 219 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
 
 ## Notas de actualización
 
-Antes de cada actualización: respaldo manual (`python -m oceanica.respaldos --manual`, o Configuración → Respaldo).
-Después: `python -m oceanica.migrar` (o `OceanicaAdmin.exe migrar`). Solo aplica lo pendiente; volver a correrlo no hace nada.
+**No hay que correr nada para actualizar.** Se instala la versión nueva y, al abrir el programa, la base se pone al día
+sola: si hay cambios pendientes, **primero hace un respaldo** y luego los aplica. Si el respaldo o un cambio fallan, el
+programa no abre (para no trabajar con la base a medias), avisa que se llame a la encargada y deja en `logs/` el
+detalle y el comando exacto para regresar a como estaba. Para soporte técnico sigue existiendo
+`OceanicaAdmin.exe migrar` (con `--sin-respaldo` solo si el respaldo previo no se puede hacer y ya hay otro de hoy).
+
+- **Migración 014 («cobrado» solo con pagos confirmados).** Regla del cliente: una transferencia está «por confirmar»
+  hasta que la encargada la revisa en el banco. Antes, Reportes y el Panel la sumaban como cobrada desde que se
+  registraba, y una rechazada inflaba el día en que se cobró. Ahora «cobrado» solo cuenta pagos confirmados; lo
+  pendiente aparece aparte («$X en transferencias por confirmar»). Por eso, en periodos ya pasados, «cobrado» puede
+  bajar respecto a lo que se veía antes: es la cifra correcta.
+- **El programa se actualiza solo al abrir; respaldo diario programado; recuperar la contraseña de la encargada.** El instalador programa el respaldo diario en el Programador de tareas (`OceanicaAdmin.exe
+  programar-respaldo`): a la hora de `respaldo_hora` (21:00) y, si la computadora estaba apagada, en cuanto se
+  enciende. Nuevo `OceanicaAdmin.exe restablecer-admin` (menú Inicio → «Restablecer contraseña de administrador»): pone
+  una contraseña temporal a un administrador que no puede entrar; pide la contraseña de root de MariaDB.
 
 - **Migraciones 012 y 013 (aviso de orden lista, ropa olvidada).** 012 agrega a `ordenes` cuándo y quién avisó al
   cliente que su ropa está lista. 013 agrega el ajuste `almacenaje_dias` (30) que usa el reporte de ropa olvidada.
@@ -67,8 +80,11 @@ Después: `python -m oceanica.migrar` (o `OceanicaAdmin.exe migrar`). Solo aplic
 1. Instalar MariaDB 10.11 LTS o MySQL 8 como servicio de Windows y agregar su carpeta `bin` al PATH.
 2. `pip install -r requirements.txt`
 3. Primera vez: `python -m oceanica.init_db` (pide la contraseña de root una sola vez y no la guarda; el sistema nunca usa root). Si la base y `oceanica_app` ya existen: `python -m oceanica.configurar`. La configuración queda en `%APPDATA%\OceanicaGestion`, fuera de la carpeta del programa.
-4. Programador de tareas de Windows, diario: `python -m oceanica.respaldos --auto`.
-5. Al recibir una versión nueva: respaldo manual y `python -m oceanica.migrar`.
+4. Respaldo diario: con el instalador queda programado solo. Sin instalador: `python -m oceanica.programar_respaldo`
+   (o, a mano, una tarea diaria del Programador de tareas con `python -m oceanica.respaldos --auto`).
+5. Al recibir una versión nueva: instalarla y abrir el programa. La base se actualiza sola (con respaldo previo).
+6. Si la encargada olvida su contraseña y nadie más es administrador: `OceanicaAdmin.exe restablecer-admin` (pide root).
+   Mejor aún: que el dueño tenga su propia cuenta de administrador, para no depender de una sola persona.
 
 `config.ini` (en `%APPDATA%\OceanicaGestion`, junto con respaldos, logs y tickets) contiene la contraseña de la base: no se comparte ni se sube al repositorio.
 
@@ -77,7 +93,7 @@ En Windows con procesador ARM el conector de MySQL no tiene su parte en C; el si
 ## Generar el programa para Windows (.exe e instalador)
 
 En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construir_exe.bat`.
-- Crea `dist\Oceanica\` con `Oceanica.exe` (el programa) y `OceanicaAdmin.exe` (con consola, para `migrar`, `configurar`, `instalar` y `respaldo --auto`).
+- Crea `dist\Oceanica\` con `Oceanica.exe` (el programa) y `OceanicaAdmin.exe` (con consola, para `instalar`, `configurar`, `respaldo --auto`, `programar-respaldo`, `restablecer-admin` y, solo para soporte, `migrar`).
 - Con Inno Setup 6 instalado también crea `dist\Instalar_Oceanica.exe`.
 - En la PC del cliente no hace falta Python; sí MariaDB/MySQL (y `mysqldump` en el PATH para los respaldos).
 
@@ -181,7 +197,7 @@ En una base de pruebas: `python -m oceanica.datos_demo`. Crea servicios con prec
 
 - La impresión directa ESC/POS (con el logo) depende de Windows + pywin32 y falta probarla con la impresora real del local.
   En modo RAW, Windows no avisa si la impresora no tiene papel: el ticket puede «imprimirse» sin salir.
-- `construir_exe.bat`, `Oceanica.exe`, `OceanicaAdmin.exe` y el instalador no se han verificado en Windows con la factura.
+- El CI construye en Windows real `Oceanica.exe`, `OceanicaAdmin.exe` y el instalador, comprueba que arrancan y que el respaldo diario se programa. Falta instalarlo en una PC real (cuenta estándar y de administrador) y en la del local.
 - No timbra facturas (CFDI): solo controla cuáles hay que hacer. Funciona en una sola computadora.
 - Código de barras y lector: pendiente de confirmar con el cliente (issue #1 del repositorio). No está construido; las etiquetas de bolsa son solo texto.
 - Nómina no es fiscal: no sustituye CFDI ni obligaciones de IMSS/SAT.
