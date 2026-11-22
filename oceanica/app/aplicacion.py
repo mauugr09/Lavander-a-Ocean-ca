@@ -66,6 +66,26 @@ def preparar_aplicacion() -> QApplication:
     return app
 
 
+def actualizar_al_abrir(cfg) -> bool:
+    """Si la versión nueva del programa trae cambios para la base, los aplica solos (con respaldo previo), para que
+    nadie tenga que correr «migrar». Devuelve False si no se pudo: el programa no debe abrir con la base a medias."""
+    from .. import migrar
+    log = logging.getLogger("oceanica")
+    try:
+        r = migrar.actualizar(cfg)
+    except migrar.ErrorActualizacion as e:
+        log.error("No se pudo actualizar la base al abrir: %s", e)
+        QMessageBox.critical(None, "Oceánica Gestión",
+                             "El programa se actualizó, pero no pudo poner al día la base de datos, así que no se abrirá "
+                             "para no arriesgar la información.\n\n"
+                             "Avise a la encargada: el detalle y la forma de regresar a como estaba quedaron en la "
+                             "carpeta logs.\nMientras tanto, anote las órdenes en papel.")
+        return False
+    if r["aplicadas"]:
+        log.info("Base actualizada al abrir: migraciones %s; respaldo previo: %s", r["aplicadas"], r["respaldo"])
+    return True
+
+
 def main() -> int:
     _configurar_log()
     app = preparar_aplicacion()
@@ -88,6 +108,9 @@ def main() -> int:
                              "2. Vuelva a abrir Oceánica.\n\n"
                              "Si sigue igual, avise a la encargada: el detalle quedó en la carpeta logs.\n"
                              "Mientras tanto, anote las órdenes en papel.")
+        return 1
+    if not actualizar_al_abrir(cfg):
+        conn.close()
         return 1
     ctx = Contexto(conn, cfg)
     ventana = Ventana(ctx)

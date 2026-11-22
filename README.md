@@ -14,8 +14,7 @@ Cada quien trabaja con **su propia base de datos**; el repositorio solo lleva el
 
 ```
 git pull
-python -m oceanica.migrar      # aplica a SU base los cambios de estructura, sin borrar datos
-python -m oceanica
+python -m oceanica             # al abrir, pone SU base al día (con respaldo previo), sin borrar datos
 ```
 
 Primera vez en una computadora: `pip install -r requirements.txt` y `python -m oceanica.init_db` (ver «Instalación»).
@@ -41,14 +40,13 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 
 ## Notas de actualización
 
-Al instalar una versión nueva, el instalador corre `OceanicaAdmin.exe migrar` (o, sin instalador, `python -m oceanica.migrar`).
-Solo aplica lo pendiente; volver a correrlo no hace nada. **Si hay algo pendiente, primero hace un respaldo** y muestra
-dónde quedó; si el respaldo falla (por ejemplo, falta `mysqldump`), no cambia nada. Si una migración falla a la mitad,
-el mensaje dice el comando exacto para restaurar ese respaldo. `migrar --sin-respaldo` existe solo para cuando el
-respaldo previo no se puede hacer y ya hay otro de hoy.
+**No hay que correr nada para actualizar.** Se instala la versión nueva y, al abrir el programa, la base se pone al día
+sola: si hay cambios pendientes, **primero hace un respaldo** y luego los aplica. Si el respaldo o un cambio fallan, el
+programa no abre (para no trabajar con la base a medias), avisa que se llame a la encargada y deja en `logs/` el
+detalle y el comando exacto para regresar a como estaba. Para soporte técnico sigue existiendo
+`OceanicaAdmin.exe migrar` (con `--sin-respaldo` solo si el respaldo previo no se puede hacer y ya hay otro de hoy).
 
-- **Actualizar ya respalda solo; respaldo diario programado; recuperar la contraseña de la encargada** (sin migraciones
-  nuevas). El instalador programa el respaldo diario en el Programador de tareas (`OceanicaAdmin.exe
+- **El programa se actualiza solo al abrir; respaldo diario programado; recuperar la contraseña de la encargada.** El instalador programa el respaldo diario en el Programador de tareas (`OceanicaAdmin.exe
   programar-respaldo`): a la hora de `respaldo_hora` (21:00) y, si la computadora estaba apagada, en cuanto se
   enciende. Nuevo `OceanicaAdmin.exe restablecer-admin` (menú Inicio → «Restablecer contraseña de administrador»): pone
   una contraseña temporal a un administrador que no puede entrar; pide la contraseña de root de MariaDB.
@@ -78,7 +76,7 @@ respaldo previo no se puede hacer y ya hay otro de hoy.
 3. Primera vez: `python -m oceanica.init_db` (pide la contraseña de root una sola vez y no la guarda; el sistema nunca usa root). Si la base y `oceanica_app` ya existen: `python -m oceanica.configurar`. La configuración queda en `%APPDATA%\OceanicaGestion`, fuera de la carpeta del programa.
 4. Respaldo diario: con el instalador queda programado solo. Sin instalador: `python -m oceanica.programar_respaldo`
    (o, a mano, una tarea diaria del Programador de tareas con `python -m oceanica.respaldos --auto`).
-5. Al recibir una versión nueva: `python -m oceanica.migrar` (respalda solo antes de cambiar la base).
+5. Al recibir una versión nueva: instalarla y abrir el programa. La base se actualiza sola (con respaldo previo).
 6. Si la encargada olvida su contraseña y nadie más es administrador: `OceanicaAdmin.exe restablecer-admin` (pide root).
    Mejor aún: que el dueño tenga su propia cuenta de administrador, para no depender de una sola persona.
 
