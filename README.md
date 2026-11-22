@@ -27,8 +27,9 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 
 | Ruta | Contenido |
 |---|---|
-| `db/migrations/001..011` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente, categorías del mostrador, servicio a domicilio, textos del ticket, datos fiscales del cliente y banderas de factura en la orden |
-| `oceanica/init_db.py` · `configurar.py` · `migrar.py` | Instalación (crea la base, un usuario MySQL limitado y el primer administrador), conexión a una base existente y actualización |
+| `db/migrations/001..014` | Esquema (27 tablas), vistas de reportes, datos iniciales, reglas del backend, PIN y transferencias por confirmar, respuestas del cliente, categorías del mostrador, servicio a domicilio, textos del ticket, datos fiscales del cliente, banderas de factura en la orden, aviso de orden lista, días de almacenaje y «cobrado» solo con pagos confirmados |
+| `oceanica/init_db.py` · `configurar.py` · `migrar.py` | Instalación (crea la base, un usuario MySQL limitado y el primer administrador), conexión a una base existente y actualización (el programa la hace solo al abrir) |
+| `oceanica/programar_respaldo.py` · `restablecer_admin.py` | Respaldo diario en el Programador de tareas de Windows y contraseña temporal para un administrador que no puede entrar |
 | `oceanica/respaldos.py` | Respaldo `.sql.gz` con mysqldump, copia externa, retención y restauración |
 | `oceanica/seguridad.py` | bcrypt, política de contraseñas, PIN, bloqueo tras 5 intentos (15 min) y bitácora |
 | `oceanica/datos_demo.py` | Datos de ejemplo para probar (nunca en la lavandería) |
@@ -92,7 +93,7 @@ En Windows con procesador ARM el conector de MySQL no tiene su parte en C; el si
 ## Generar el programa para Windows (.exe e instalador)
 
 En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construir_exe.bat`.
-- Crea `dist\Oceanica\` con `Oceanica.exe` (el programa) y `OceanicaAdmin.exe` (con consola, para `migrar`, `configurar`, `instalar` y `respaldo --auto`).
+- Crea `dist\Oceanica\` con `Oceanica.exe` (el programa) y `OceanicaAdmin.exe` (con consola, para `instalar`, `configurar`, `respaldo --auto`, `programar-respaldo`, `restablecer-admin` y, solo para soporte, `migrar`).
 - Con Inno Setup 6 instalado también crea `dist\Instalar_Oceanica.exe`.
 - En la PC del cliente no hace falta Python; sí MariaDB/MySQL (y `mysqldump` en el PATH para los respaldos).
 
@@ -196,7 +197,7 @@ En una base de pruebas: `python -m oceanica.datos_demo`. Crea servicios con prec
 
 - La impresión directa ESC/POS (con el logo) depende de Windows + pywin32 y falta probarla con la impresora real del local.
   En modo RAW, Windows no avisa si la impresora no tiene papel: el ticket puede «imprimirse» sin salir.
-- `construir_exe.bat`, `Oceanica.exe`, `OceanicaAdmin.exe` y el instalador no se han verificado en Windows con la factura.
+- El CI construye en Windows real `Oceanica.exe`, `OceanicaAdmin.exe` y el instalador, comprueba que arrancan y que el respaldo diario se programa. Falta instalarlo en una PC real (cuenta estándar y de administrador) y en la del local.
 - No timbra facturas (CFDI): solo controla cuáles hay que hacer. Funciona en una sola computadora.
 - Código de barras y lector: pendiente de confirmar con el cliente (issue #1 del repositorio). No está construido; las etiquetas de bolsa son solo texto.
 - Nómina no es fiscal: no sustituye CFDI ni obligaciones de IMSS/SAT.
