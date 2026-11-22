@@ -37,7 +37,7 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 | `oceanica/app/` | Interfaz PySide6: entrada, mostrador, órdenes, caja, asistencia, clientes, inventario y, para el administrador, panel, reportes, nómina, servicios y precios, empleados, transferencias y configuración |
 | `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` · `importacion.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG, animación de la entrada y botones de importación desde Excel o CSV |
 | `oceanica/app/recursos/` | Logo, ícono e íconos de línea (Tabler Icons, licencia MIT) |
-| `tests/` | 229 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
+| `tests/` | 230 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
 
 ## Notas de actualización
 

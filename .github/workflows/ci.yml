@@ -156,8 +156,9 @@ jobs:
           # Lo mismo que hace el asistente de primera vez, contra la MariaDB que acaba de instalar el instalador
           python -c "from oceanica import instalacion as i; e = i.estado_servidor(); print('estado:', e); assert e == i.ROOT_SIN_CONTRASENA, e; r = i.instalar(root_actual='', nueva_root='Recupera#2026', usuario_admin='encargada', password_admin='Encargada#2026'); print('admin creado:', r['admin_creado']); assert i.estado_servidor() == i.ROOT_CON_CONTRASENA"
           if ($LASTEXITCODE -ne 0) { throw "La instalación de la base falló" }
-          # Los respaldos encuentran mysqldump aunque no esté en el PATH
-          python -c "from oceanica.respaldos import _buscar, crear_respaldo; print(_buscar('mysqldump')); print(crear_respaldo('manual'))"
+          # Los respaldos encuentran mysqldump aunque no esté en el PATH (se quita el MySQL que trae la imagen de GitHub)
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'MySQL|MariaDB' }) -join ';'
+          python -c "from oceanica.respaldos import _buscar, crear_respaldo; r = _buscar('mysqldump'); print(r); assert 'MariaDB' in r, r; print(crear_respaldo('manual'))"
           if ($LASTEXITCODE -ne 0) { throw "El respaldo no funcionó con la MariaDB instalada" }
           # El programa instalado abre conectado a la base (pantalla de entrada) y no se cierra solo
           $app = Start-Process -FilePath $exe -PassThru

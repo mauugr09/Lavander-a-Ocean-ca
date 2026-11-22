@@ -135,3 +135,20 @@ def test_restaurar_avisa_si_el_archivo_no_existe_o_no_sirve(conn, datos, tmp_pat
     with pytest.raises(RuntimeError, match="La restauración falló"):
         respaldos.restaurar(roto, cfg=_CFG)
     assert _huella(conn) == antes                   # un archivo inválido no toca los datos
+
+
+def test_mysqldump_sin_path_se_busca_en_la_carpeta_de_mariadb(tmp_path, monkeypatch):
+    """El instalador de Oceánica no toca el PATH: el respaldo debe encontrar mysqldump en Program Files."""
+    from oceanica import respaldos
+    for carpeta in ("MariaDB 10.3", "MariaDB 10.11", "MySQL/MySQL Server 8.0"):
+        b = tmp_path / carpeta / "bin"
+        b.mkdir(parents=True)
+        (b / "mysqldump.exe").write_text("")
+    monkeypatch.setenv("PATH", "")
+    for var in ("ProgramW6432", "ProgramFiles(x86)"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("ProgramFiles", str(tmp_path))
+    assert respaldos._buscar("mysqldump") == str(tmp_path / "MariaDB 10.11" / "bin" / "mysqldump.exe")  # la más nueva
+    monkeypatch.setenv("ProgramFiles", str(tmp_path / "vacia"))
+    with pytest.raises(FileNotFoundError, match="MariaDB"):
+        respaldos._buscar("mysqldump")
