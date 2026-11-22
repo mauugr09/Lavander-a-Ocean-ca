@@ -37,7 +37,7 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 | `oceanica/app/` | Interfaz PySide6: entrada, mostrador, órdenes, caja, asistencia, clientes, inventario y, para el administrador, panel, reportes, nómina, servicios y precios, empleados, transferencias y configuración |
 | `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` · `importacion.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG, animación de la entrada y botones de importación desde Excel o CSV |
 | `oceanica/app/recursos/` | Logo, ícono e íconos de línea (Tabler Icons, licencia MIT) |
-| `tests/` | 223 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
+| `tests/` | 230 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
 
 ## Notas de actualización
 
@@ -77,16 +77,23 @@ detalle y el comando exacto para regresar a como estaba. Para soporte técnico s
 
 ## Instalación en la PC del local
 
-Guía paso a paso con el instalador (sin Python): [`INSTALAR_EN_MI_PC.md`](INSTALAR_EN_MI_PC.md).
+**Con el instalador (lo normal, sin consola):** doble clic en `Instalar_Oceanica.exe` → Siguiente → Instalar.
+- Si la computadora no tiene MariaDB ni MySQL, el instalador instala **MariaDB 10.11 LTS** como servicio. Si ya tiene
+  uno (como la MariaDB 10.3.9 del local), **no lo toca** y usa ese.
+- La primera vez que se abre el programa aparece un **asistente**: pide el usuario y la contraseña de la encargada y,
+  en una MariaDB recién instalada, una **contraseña de recuperación** (queda como contraseña de root; solo se usa
+  para «Restablecer contraseña de administrador»). En una base que ya existía pide la contraseña de root actual.
+  El asistente crea la base, el usuario `oceanica_app` y la cuenta de la encargada; root no se guarda en ningún lado.
+- Entre la instalación de MariaDB y la primera apertura, root queda sin contraseña (solo desde esta misma
+  computadora). Por eso el instalador ofrece abrir el programa al terminar.
+- El respaldo diario queda programado y encuentra `mysqldump` en la carpeta de MariaDB aunque no esté en el PATH.
+- Al recibir una versión nueva: instalarla y abrir el programa. La base se actualiza sola (con respaldo previo).
+- Si la encargada olvida su contraseña y nadie más es administrador: menú Inicio → «Restablecer contraseña de
+  administrador» (pide la contraseña de recuperación). Mejor aún: que el dueño tenga su propia cuenta de administrador.
 
-1. Instalar MariaDB 10.11 LTS o MySQL 8 como servicio de Windows y agregar su carpeta `bin` al PATH.
-2. `pip install -r requirements.txt`
-3. Primera vez: `python -m oceanica.init_db` (pide la contraseña de root una sola vez y no la guarda; el sistema nunca usa root). Si la base y `oceanica_app` ya existen: `python -m oceanica.configurar`. La configuración queda en `%APPDATA%\OceanicaGestion`, fuera de la carpeta del programa.
-4. Respaldo diario: con el instalador queda programado solo. Sin instalador: `python -m oceanica.programar_respaldo`
-   (o, a mano, una tarea diaria del Programador de tareas con `python -m oceanica.respaldos --auto`).
-5. Al recibir una versión nueva: instalarla y abrir el programa. La base se actualiza sola (con respaldo previo).
-6. Si la encargada olvida su contraseña y nadie más es administrador: `OceanicaAdmin.exe restablecer-admin` (pide root).
-   Mejor aún: que el dueño tenga su propia cuenta de administrador, para no depender de una sola persona.
+**Desde el código (desarrollo):** MariaDB o MySQL instalado, `pip install -r requirements.txt` y
+`python -m oceanica` (abre el mismo asistente). Por consola siguen existiendo `python -m oceanica.init_db` y
+`python -m oceanica.configurar`.
 
 `config.ini` (en `%APPDATA%\OceanicaGestion`, junto con respaldos, logs y tickets) contiene la contraseña de la base: no se comparte ni se sube al repositorio.
 
@@ -97,7 +104,8 @@ En Windows con procesador ARM el conector de MySQL no tiene su parte en C; el si
 En la PC con Windows (Python 3.12+ con «Add to PATH»): doble clic en `construir_exe.bat`.
 - Crea `dist\Oceanica\` con `Oceanica.exe` (el programa) y `OceanicaAdmin.exe` (con consola, para `instalar`, `configurar`, `respaldo --auto`, `programar-respaldo`, `restablecer-admin` y, solo para soporte, `migrar`).
 - Con Inno Setup 6 instalado también crea `dist\Instalar_Oceanica.exe`.
-- En la PC del cliente no hace falta Python; sí MariaDB/MySQL (y `mysqldump` en el PATH para los respaldos).
+- El CI mete en el instalador el `.msi` de MariaDB 10.11 (en local, ponerlo como `dist\mariadb.msi` antes de Inno Setup).
+- En la PC del cliente no hace falta Python ni instalar nada más.
 
 ## Cómo se usa
 

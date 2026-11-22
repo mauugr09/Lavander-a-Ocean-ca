@@ -92,7 +92,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "OceanicaAdmin.exe terminó con código $LASTEXITCODE" }
           $salida
           if (-not ($salida -match "--restaurar")) { throw "La ayuda de respaldos no es la esperada" }
-      - name: La ventana arranca y sigue abierta (sin base configurada muestra su aviso, no se cae)
+      - name: La ventana arranca y sigue abierta (sin base configurada abre el asistente, no se cae)
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
@@ -122,6 +122,15 @@ jobs:
           schtasks /Query /TN "\Oceanica\Respaldo diario" 2>$null
           if ($LASTEXITCODE -eq 0) { throw "La tarea sigue existiendo después de quitarla" }
           $global:LASTEXITCODE = 0
+      - name: MariaDB 10.11 LTS para meterlo en el instalador
+        shell: pwsh
+        run: |
+          $url = "https://archive.mariadb.org/mariadb-10.11.10/winx64-packages/mariadb-10.11.10-winx64.msi"
+          Invoke-WebRequest -Uri $url -OutFile dist\mariadb.msi -UseBasicParsing
+          $tam = (Get-Item dist\mariadb.msi).Length
+          "mariadb.msi: $tam bytes"
+          if ($tam -lt 30MB) { throw "La descarga de MariaDB parece incompleta" }
+          Get-FileHash dist\mariadb.msi -Algorithm SHA256
       - name: Instalador (Inno Setup)
         shell: pwsh
         run: |
@@ -129,6 +138,35 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
           & $iscc instalador.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup falló con código $LASTEXITCODE" }
+      - name: El instalador deja todo listo en una PC sin base de datos
+        shell: pwsh
+        env:
+          OCEANICA_HOME: ${{ runner.temp }}\oceanica_limpia
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          # La imagen de GitHub trae MySQL: se quita para simular la PC de un cliente sin base de datos.
+          Get-Service | Where-Object { $_.Name -match '^(mysql|mariadb)' } | ForEach-Object {
+            Stop-Service $_.Name -Force -ErrorAction SilentlyContinue; sc.exe delete $_.Name | Out-Null }
+          $p = Start-Process dist\Instalar_Oceanica.exe -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/LOG=$env:RUNNER_TEMP\instalador.log" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content "$env:RUNNER_TEMP\instalador.log" -Tail 40; throw "El instalador terminó con código $($p.ExitCode)" }
+          $s = Get-Service MariaDB -ErrorAction SilentlyContinue
+          if (-not $s -or $s.Status -ne 'Running') { Get-Content "$env:RUNNER_TEMP\instalador.log" -Tail 40; throw "MariaDB no quedó instalado y encendido" }
+          $exe = "${env:ProgramFiles}\Oceanica\Oceanica.exe"
+          if (-not (Test-Path $exe)) { throw "No quedó $exe" }
+          # Lo mismo que hace el asistente de primera vez, contra la MariaDB que acaba de instalar el instalador
+          python -c "from oceanica import instalacion as i; e = i.estado_servidor(); print('estado:', e); assert e == i.ROOT_SIN_CONTRASENA, e; r = i.instalar(root_actual='', nueva_root='Recupera#2026', usuario_admin='encargada', password_admin='Encargada#2026'); print('admin creado:', r['admin_creado']); assert i.estado_servidor() == i.ROOT_CON_CONTRASENA"
+          if ($LASTEXITCODE -ne 0) { throw "La instalación de la base falló" }
+          # Los respaldos encuentran mysqldump aunque no esté en el PATH (se quita el MySQL que trae la imagen de GitHub)
+          $env:PATH = ($env:PATH -split ';' | Where-Object { $_ -notmatch 'MySQL|MariaDB' }) -join ';'
+          python -c "from oceanica.respaldos import _buscar, crear_respaldo; r = _buscar('mysqldump'); print(r); assert 'MariaDB' in r, r; print(crear_respaldo('manual'))"
+          if ($LASTEXITCODE -ne 0) { throw "El respaldo no funcionó con la MariaDB instalada" }
+          # El programa instalado abre conectado a la base (pantalla de entrada) y no se cierra solo
+          $app = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 15
+          $registro = "$env:OCEANICA_HOME\logs\oceanica.log"
+          if (Test-Path $registro) { Get-Content $registro -Tail 20 }
+          if ($app.HasExited) { throw "Oceanica.exe se cerró solo con código $($app.ExitCode)" }
+          Stop-Process -Id $app.Id -Force
       - name: Guardar el instalador
         uses: actions/upload-artifact@v4
         with:
