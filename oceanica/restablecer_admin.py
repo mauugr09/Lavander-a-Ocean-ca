@@ -75,7 +75,7 @@ def main() -> int:
         return 1
     print("Administradores:", ", ".join(a["usuario"] + ("" if a["activo"] else " (desactivado)") for a in admins))
     usuario = input("¿A cuál le restablece la contraseña? ").strip()
-    root_password = getpass.getpass("Contraseña de root de MySQL/MariaDB (no se guarda): ")
+    root_password = getpass.getpass("Contraseña de recuperación (root de la base; no se guarda): ")
     nueva = getpass.getpass("Contraseña temporal nueva: ")
     if getpass.getpass("Repítala: ") != nueva:
         print("Las contraseñas no coinciden. No se cambió nada.")

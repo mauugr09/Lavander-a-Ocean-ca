@@ -91,12 +91,12 @@ def main() -> int:
     app = preparar_aplicacion()
     cfg = cargar_config()
     if not RUTA_CONFIG.exists() and not cfg.password:
-        # Primera vez en esta computadora: el mensaje es para quien instala, por eso sí lleva los comandos.
-        QMessageBox.critical(None, "Oceánica Gestión",
-                             "El sistema todavía no está instalado en esta computadora.\n\n"
-                             "• Primera vez: python -m oceanica.init_db (pide root una sola vez)\n"
-                             "• Si la base ya existe: python -m oceanica.configurar")
-        return 1
+        # Primera vez en esta computadora: el asistente crea la base y la cuenta de la encargada, sin consola.
+        from .asistente import AsistenteInstalacion
+        asistente = AsistenteInstalacion()
+        if not asistente.exec() or not asistente.resultado:
+            return 1
+        cfg = asistente.resultado["cfg"]
     try:
         conn = conectar(cfg)
     except mysql.connector.Error:

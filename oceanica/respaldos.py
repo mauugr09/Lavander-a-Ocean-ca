@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import gzip
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -38,13 +39,31 @@ def _archivo_credenciales(cfg: ConfigDB):
             pass
 
 
+def _carpetas_bin_conocidas() -> list[Path]:
+    """Carpetas `bin` donde los instaladores de MariaDB y MySQL dejan sus programas (la más nueva primero)."""
+    carpetas: list[Path] = []
+    for base in {os.environ.get("ProgramFiles"), os.environ.get("ProgramW6432"), os.environ.get("ProgramFiles(x86)")}:
+        if not base:
+            continue
+        for patron in ("MariaDB */bin", "MySQL/MySQL Server */bin"):
+            carpetas.extend(Path(base).glob(patron))
+    def version(c: Path) -> tuple:   # «MariaDB 10.11» va antes que «MariaDB 10.3»
+        return tuple(int(n) for n in re.findall(r"\d+", c.parent.name))
+    return sorted(carpetas, key=version, reverse=True)
+
+
 def _buscar(programa: str) -> str:
     ruta = shutil.which(programa)
-    if not ruta:
-        raise FileNotFoundError(
-            f"No se encontró '{programa}'. Agrega la carpeta bin de MySQL al PATH de Windows."
-        )
-    return ruta
+    if ruta:
+        return ruta
+    # Sin PATH: el instalador de Oceánica no lo modifica, así que se busca donde lo deja MariaDB/MySQL.
+    for carpeta in _carpetas_bin_conocidas():
+        for nombre in (f"{programa}.exe", programa):
+            if (carpeta / nombre).is_file():
+                return str(carpeta / nombre)
+    raise FileNotFoundError(
+        f"No se encontró '{programa}'. Revise que MariaDB esté instalado en esta computadora."
+    )
 
 
 def crear_respaldo(tipo: str = "manual", usuario_id: int | None = None,

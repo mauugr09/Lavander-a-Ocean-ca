@@ -769,12 +769,27 @@ def test_al_abrir_sin_base_el_aviso_es_para_el_empleado(qapp, monkeypatch, tmp_p
     assert "reinicie la computadora" in aviso and "encargada" in aviso
     assert not any(t in aviso for t in ("python", "root", "2003", "10061", "MySQL server", "init_db"))
 
-    # primera vez (sin configuración): ahí sí van las instrucciones de instalación
+    # primera vez (sin configuración): abre el asistente de instalación, sin comandos; si lo cierra, no sigue
+    from oceanica.app import asistente
     config = tmp_path / "config.ini"
     monkeypatch.setattr(aplicacion, "RUTA_CONFIG", config)
     monkeypatch.setattr(aplicacion, "cargar_config", lambda: ConfigDB(host="127.0.0.1", usuario="x", password="", base="z"))
-    monkeypatch.setattr(aplicacion, "conectar", lambda cfg: pytest.fail("sin configuración no debe intentar conectar"))
-    assert aplicacion.main() == 1 and "oceanica.init_db" in vistos[-1]
+    monkeypatch.setattr(aplicacion, "conectar", lambda cfg: pytest.fail("si cierra el asistente no debe intentar conectar"))
+    abiertos = []
+    monkeypatch.setattr(asistente.instalacion, "estado_servidor", lambda *a, **k: asistente.instalacion.SIN_SERVIDOR)
+    monkeypatch.setattr(asistente.AsistenteInstalacion, "exec", lambda self: (abiertos.append(self), 0)[1])
+    assert aplicacion.main() == 1 and len(abiertos) == 1
+
+    # si el asistente termina, el programa sigue con la configuración que creó
+    nueva = ConfigDB(host="127.0.0.1", usuario="oceanica_app", password="nueva", base="oceanica")
+
+    def termina(self):
+        self.resultado = {"cfg": nueva, "admin_creado": True}
+        return 1
+    monkeypatch.setattr(asistente.AsistenteInstalacion, "exec", termina)
+    usadas = []
+    monkeypatch.setattr(aplicacion, "conectar", lambda cfg: (usadas.append(cfg), sin_servidor(cfg)))
+    assert aplicacion.main() == 1 and usadas == [nueva]
 
 
 # ---------- importación desde Excel o CSV en Clientes e Inventario ----------------
