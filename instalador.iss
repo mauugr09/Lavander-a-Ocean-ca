@@ -28,7 +28,14 @@ Name: "{group}\Lavandería Oceánica"; Filename: "{app}\Oceanica.exe"
 Name: "{autodesktop}\Lavandería Oceánica"; Filename: "{app}\Oceanica.exe"; Tasks: escritorio
 Name: "{group}\Actualizar base de datos (migrar)"; Filename: "{app}\OceanicaAdmin.exe"; Parameters: "migrar"
 Name: "{group}\Respaldo manual"; Filename: "{app}\OceanicaAdmin.exe"; Parameters: "respaldo --manual"
+Name: "{group}\Restablecer contraseña de administrador"; Filename: "{app}\OceanicaAdmin.exe"; Parameters: "restablecer-admin"
 
+; Los pasos corren con la cuenta de Windows de quien abrió el instalador (runasoriginaluser), no con la cuenta de
+; administrador que pide Windows: la configuración del sistema y el respaldo programado son de esa cuenta.
 [Run]
-Filename: "{app}\OceanicaAdmin.exe"; Parameters: "migrar"; Description: "Actualizar la base de datos"; Flags: postinstall skipifsilent runascurrentuser
+Filename: "{app}\OceanicaAdmin.exe"; Parameters: "migrar"; Description: "Actualizar la base de datos (hace un respaldo antes)"; Flags: postinstall skipifsilent runasoriginaluser
+Filename: "{app}\OceanicaAdmin.exe"; Parameters: "programar-respaldo"; Description: "Programar el respaldo diario"; Flags: postinstall skipifsilent runasoriginaluser
 Filename: "{app}\Oceanica.exe"; Description: "Abrir Lavandería Oceánica"; Flags: postinstall nowait skipifsilent
+
+[UninstallRun]
+Filename: "schtasks.exe"; Parameters: "/Delete /F /TN ""\Oceanica\Respaldo diario"""; Flags: runhidden; RunOnceId: "QuitarRespaldo"

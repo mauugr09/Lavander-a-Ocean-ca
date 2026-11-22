@@ -41,8 +41,17 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 
 ## Notas de actualización
 
-Antes de cada actualización: respaldo manual (`python -m oceanica.respaldos --manual`, o Configuración → Respaldo).
-Después: `python -m oceanica.migrar` (o `OceanicaAdmin.exe migrar`). Solo aplica lo pendiente; volver a correrlo no hace nada.
+Al instalar una versión nueva, el instalador corre `OceanicaAdmin.exe migrar` (o, sin instalador, `python -m oceanica.migrar`).
+Solo aplica lo pendiente; volver a correrlo no hace nada. **Si hay algo pendiente, primero hace un respaldo** y muestra
+dónde quedó; si el respaldo falla (por ejemplo, falta `mysqldump`), no cambia nada. Si una migración falla a la mitad,
+el mensaje dice el comando exacto para restaurar ese respaldo. `migrar --sin-respaldo` existe solo para cuando el
+respaldo previo no se puede hacer y ya hay otro de hoy.
+
+- **Actualizar ya respalda solo; respaldo diario programado; recuperar la contraseña de la encargada** (sin migraciones
+  nuevas). El instalador programa el respaldo diario en el Programador de tareas (`OceanicaAdmin.exe
+  programar-respaldo`): a la hora de `respaldo_hora` (21:00) y, si la computadora estaba apagada, en cuanto se
+  enciende. Nuevo `OceanicaAdmin.exe restablecer-admin` (menú Inicio → «Restablecer contraseña de administrador»): pone
+  una contraseña temporal a un administrador que no puede entrar; pide la contraseña de root de MariaDB.
 
 - **Migraciones 012 y 013 (aviso de orden lista, ropa olvidada).** 012 agrega a `ordenes` cuándo y quién avisó al
   cliente que su ropa está lista. 013 agrega el ajuste `almacenaje_dias` (30) que usa el reporte de ropa olvidada.
@@ -67,8 +76,11 @@ Después: `python -m oceanica.migrar` (o `OceanicaAdmin.exe migrar`). Solo aplic
 1. Instalar MariaDB 10.11 LTS o MySQL 8 como servicio de Windows y agregar su carpeta `bin` al PATH.
 2. `pip install -r requirements.txt`
 3. Primera vez: `python -m oceanica.init_db` (pide la contraseña de root una sola vez y no la guarda; el sistema nunca usa root). Si la base y `oceanica_app` ya existen: `python -m oceanica.configurar`. La configuración queda en `%APPDATA%\OceanicaGestion`, fuera de la carpeta del programa.
-4. Programador de tareas de Windows, diario: `python -m oceanica.respaldos --auto`.
-5. Al recibir una versión nueva: respaldo manual y `python -m oceanica.migrar`.
+4. Respaldo diario: con el instalador queda programado solo. Sin instalador: `python -m oceanica.programar_respaldo`
+   (o, a mano, una tarea diaria del Programador de tareas con `python -m oceanica.respaldos --auto`).
+5. Al recibir una versión nueva: `python -m oceanica.migrar` (respalda solo antes de cambiar la base).
+6. Si la encargada olvida su contraseña y nadie más es administrador: `OceanicaAdmin.exe restablecer-admin` (pide root).
+   Mejor aún: que el dueño tenga su propia cuenta de administrador, para no depender de una sola persona.
 
 `config.ini` (en `%APPDATA%\OceanicaGestion`, junto con respaldos, logs y tickets) contiene la contraseña de la base: no se comparte ni se sube al repositorio.
 

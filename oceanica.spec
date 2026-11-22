@@ -5,7 +5,7 @@
 import sys
 from PyInstaller.utils.hooks import collect_submodules
 
-ocultos = collect_submodules("mysql.connector") + ["oceanica.migrar", "oceanica.configurar", "oceanica.init_db", "oceanica.respaldos", "bcrypt", "reportlab.graphics.barcode.code128",
+ocultos = collect_submodules("mysql.connector") + ["oceanica.migrar", "oceanica.configurar", "oceanica.init_db", "oceanica.respaldos", "oceanica.restablecer_admin", "oceanica.programar_respaldo", "bcrypt", "reportlab.graphics.barcode.code128",
                                                         "PySide6.QtSvg"]
 if sys.platform == "win32":
     ocultos += ["win32print", "win32timezone"]

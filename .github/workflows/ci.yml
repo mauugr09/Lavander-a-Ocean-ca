@@ -104,6 +104,24 @@ jobs:
           if (Test-Path $registro) { Get-Content $registro -Tail 20 }
           if ($p.HasExited) { throw "Oceanica.exe se cerró solo con código $($p.ExitCode)" }
           Stop-Process -Id $p.Id -Force
+      - name: El respaldo diario queda programado en Windows (y se puede quitar)
+        shell: pwsh
+        env:
+          OCEANICA_HOME: ${{ runner.temp }}\oceanica_datos
+        run: |
+          & dist\Oceanica\OceanicaAdmin.exe programar-respaldo
+          if ($LASTEXITCODE -ne 0) { throw "programar-respaldo terminó con código $LASTEXITCODE" }
+          [xml]$tarea = schtasks /Query /TN "\Oceanica\Respaldo diario" /XML | Out-String
+          $t = $tarea.Task
+          $t.Actions.Exec.Command; $t.Actions.Exec.Arguments; $t.Triggers.CalendarTrigger.StartBoundary
+          if ($t.Settings.StartWhenAvailable -ne "true") { throw "Sin StartWhenAvailable: si la PC está apagada no respalda" }
+          if (-not ($t.Actions.Exec.Command -like "*OceanicaAdmin.exe")) { throw "La tarea no llama a OceanicaAdmin.exe" }
+          if ($t.Actions.Exec.Arguments -ne "respaldo --auto") { throw "Argumentos inesperados" }
+          if (-not ($t.Triggers.CalendarTrigger.StartBoundary -like "*T21:00:00")) { throw "Hora inesperada" }
+          & dist\Oceanica\OceanicaAdmin.exe programar-respaldo --quitar
+          schtasks /Query /TN "\Oceanica\Respaldo diario" 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "La tarea sigue existiendo después de quitarla" }
+          $global:LASTEXITCODE = 0
       - name: Instalador (Inno Setup)
         shell: pwsh
         run: |
