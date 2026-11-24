@@ -140,3 +140,43 @@ def _dejar_lista_la_encargada(conn, usuario: str, password: str) -> str:
     finally:
         cur.close()
     return "restablecida"
+
+
+def restablecer_admin(conn, *, root_actual: str, usuario: str, nueva: str,
+                      host: str = HOST, puerto: int = PUERTO, usuario_root: str = "root") -> None:
+    """Restablece la contraseña de una cuenta de administrador, con autorización por la contraseña de root.
+
+    `conn` es la conexión del sistema (ya abierta). El cambio exige la contraseña de root/recuperación para que
+    nadie pueda restablecer a un administrador sin autorización; root no se guarda."""
+    problemas = validar_politica(nueva or "")
+    if problemas:
+        raise ErrorInstalacion("Contraseña nueva: " + " ".join(problemas))
+    try:                                   # autorización: la contraseña de recuperación (root) debe ser correcta
+        _conectar_root(host, puerto, usuario_root, root_actual).close()
+    except Exception as e:
+        if getattr(e, "errno", None) in (1045, 1698):
+            raise ErrorInstalacion("La contraseña de recuperación (root de la base) no es correcta.") from None
+        raise ErrorInstalacion("No se pudo verificar la contraseña de recuperación en esta computadora.") from None
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT u.id, r.nombre FROM usuarios u JOIN roles r ON r.id = u.rol_id WHERE u.usuario = %s",
+                    (usuario.strip(),))
+        fila = cur.fetchone()
+    finally:
+        cur.close()
+    if not fila:
+        raise ErrorInstalacion(f"No existe la cuenta «{usuario.strip()}».")
+    if fila[1] != "administrador":
+        raise ErrorInstalacion(f"«{usuario.strip()}» no es una cuenta de administrador.")
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE usuarios SET password_hash = %s, activo = 1, intentos_fallidos = 0, bloqueado_hasta = NULL, "
+                    "debe_cambiar_password = 0 WHERE id = %s", (hashear(nueva), fila[0]))
+        registrar_auditoria(cur, fila[0], "password_restablecido", "usuarios", fila[0],
+                            "Desde «¿Olvidó su contraseña?» (con la contraseña de recuperación)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cur.close()

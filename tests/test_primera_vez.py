@@ -181,3 +181,36 @@ def test_asistente_instala_de_punta_a_punta(qt, servidor_nuevo, monkeypatch):
     assert qt[-1][0] == "information" and "encargada" in qt[-1][1]
     assert dlg.resultado["cuenta"] == "creada" and dlg.result() == QDialog.Accepted
     conectar(dlg.resultado["cfg"]).close()
+
+
+@requiere_root
+def test_restablecer_admin_con_recuperacion(servidor_nuevo):
+    """«¿Olvidó su contraseña?»: con la contraseña de recuperación se restablece; sin ella, no."""
+    from oceanica.seguridad import ErrorAcceso, iniciar_sesion
+    r = instalacion.instalar(root_actual="", nueva_root="Recupera#2026", **DATOS)
+    conn = conectar(r["cfg"])
+    for _ in range(5):                                       # se bloquea a propósito
+        with pytest.raises(ErrorAcceso):
+            iniciar_sesion(conn, "encargada", "mal")
+    # recuperación incorrecta -> no cambia nada
+    with pytest.raises(instalacion.ErrorInstalacion, match="recuperación"):
+        instalacion.restablecer_admin(conn, root_actual="otra", usuario="encargada", nueva="Nueva#2026",
+                                      host=HOST, puerto=PORT, usuario_root=RAIZ)
+    # contraseña nueva débil -> rechazada antes de tocar la base
+    with pytest.raises(instalacion.ErrorInstalacion, match="nueva"):
+        instalacion.restablecer_admin(conn, root_actual="Recupera#2026", usuario="encargada", nueva="123",
+                                      host=HOST, puerto=PORT, usuario_root=RAIZ)
+    # usuario que no es administrador -> error
+    from oceanica.seguridad import crear_usuario
+    crear_usuario(conn, "rosa", "ClaveRosa#1", "empleado")
+    with pytest.raises(instalacion.ErrorInstalacion, match="no es una cuenta de administrador"):
+        instalacion.restablecer_admin(conn, root_actual="Recupera#2026", usuario="rosa", nueva="Nueva#2026",
+                                      host=HOST, puerto=PORT, usuario_root=RAIZ)
+    with pytest.raises(instalacion.ErrorInstalacion, match="No existe"):
+        instalacion.restablecer_admin(conn, root_actual="Recupera#2026", usuario="nadie", nueva="Nueva#2026",
+                                      host=HOST, puerto=PORT, usuario_root=RAIZ)
+    # correcto: restablece y desbloquea
+    instalacion.restablecer_admin(conn, root_actual="Recupera#2026", usuario="encargada", nueva="Nueva#2026",
+                                  host=HOST, puerto=PORT, usuario_root=RAIZ)
+    assert iniciar_sesion(conn, "encargada", "Nueva#2026")["rol"] == "administrador"
+    conn.close()

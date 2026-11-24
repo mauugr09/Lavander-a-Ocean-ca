@@ -8,12 +8,13 @@ from pathlib import Path
 import mysql.connector
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPainter, QPixmap
-from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPushButton, QStyle, QStyleOption,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QDialog, QFormLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
+                               QPushButton, QStyle, QStyleOption, QVBoxLayout, QWidget)
 
 from .burbujas import Burbujas
 from .efectos import efectos
 from .iconos import poner
+from .. import instalacion
 from ..seguridad import ErrorAcceso, iniciar_sesion
 from ..servicios import usuarios
 from .util import etiqueta, seguro, tarjeta
@@ -84,7 +85,11 @@ class LoginView(QWidget):
         self.mayus.hide()
         self.msg = etiqueta("", "error", True)
         self.b_admin = QPushButton("Entrar como administrador")
-        for w in (self.usuario, self.password, self.mayus, self.msg, self.b_admin):
+        self.b_olvido = QPushButton("¿Olvidó su contraseña?")
+        self.b_olvido.setFlat(True)
+        self.b_olvido.setCursor(Qt.PointingHandCursor)
+        self.b_olvido.setStyleSheet("QPushButton { border: none; color: #2E6AD4; text-decoration: underline; }")
+        for w in (self.usuario, self.password, self.mayus, self.msg, self.b_admin, self.b_olvido):
             cl.addWidget(w)
         col.addWidget(card, 0, Qt.AlignHCenter)
         col.addStretch(2)
@@ -93,6 +98,7 @@ class LoginView(QWidget):
 
         self.b_mostrador.clicked.connect(self.entrar_mostrador.emit)
         self.b_admin.clicked.connect(self._admin)
+        self.b_olvido.clicked.connect(self._olvido)
         self.usuario.returnPressed.connect(self.password.setFocus)
         self.password.returnPressed.connect(self._admin)
         self.password.textEdited.connect(lambda *_: self._revisar_mayus())
@@ -158,6 +164,14 @@ class LoginView(QWidget):
         self.password.clear()
         self.entrar_admin.emit(s)
 
+    def _olvido(self):
+        dlg = RestablecerAdminDialog(self.ctx.conn, self.usuario.text().strip(), self)
+        if dlg.exec():
+            self.usuario.setText(dlg.usuario_ok)
+            self.password.clear()
+            self.password.setFocus()
+            self.msg.setText("")
+
     def _cambiar(self, s: dict) -> bool:
         actual = self.password.text()
         nueva, ok = QInputDialog.getText(self, "Contraseña nueva", "Elija una contraseña nueva (mínimo 8 caracteres, "
@@ -165,3 +179,58 @@ class LoginView(QWidget):
         if not ok:
             return False
         return seguro(self, usuarios.cambiar_password, self.ctx.conn, s, actual, nueva)[0]
+
+
+class RestablecerAdminDialog(QDialog):
+    """Restablece la contraseña de una cuenta de administrador. Exige la contraseña de recuperación (root)."""
+
+    def __init__(self, conn, usuario_sugerido: str, parent=None):
+        super().__init__(parent)
+        self.conn = conn
+        self.usuario_ok = usuario_sugerido
+        self.setWindowTitle("Restablecer contraseña de administrador")
+        self.setMinimumWidth(460)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(22, 22, 22, 22)
+        lay.setSpacing(10)
+        lay.addWidget(etiqueta("Restablecer contraseña", "titulo"))
+        lay.addWidget(etiqueta("Para hacerlo necesita la contraseña de recuperación (la de root que puso al instalar). "
+                               "La cuenta quedará con la contraseña nueva y desbloqueada.", "suave", True))
+        form = QFormLayout()
+        self.usuario = QLineEdit(usuario_sugerido)
+        self.recuperacion = QLineEdit(); self.recuperacion.setEchoMode(QLineEdit.Password)
+        self.nueva = QLineEdit(); self.nueva.setEchoMode(QLineEdit.Password)
+        self.nueva2 = QLineEdit(); self.nueva2.setEchoMode(QLineEdit.Password)
+        form.addRow("Usuario del administrador:", self.usuario)
+        form.addRow("Contraseña de recuperación:", self.recuperacion)
+        form.addRow("Contraseña nueva:", self.nueva)
+        form.addRow("Repita la nueva:", self.nueva2)
+        lay.addLayout(form)
+        fila = QHBoxLayout()
+        b_cancelar = QPushButton("Cancelar")
+        self.b_ok = QPushButton("Restablecer")
+        self.b_ok.setProperty("rol", "primario")
+        self.b_ok.setDefault(True)
+        fila.addStretch(1); fila.addWidget(b_cancelar); fila.addWidget(self.b_ok)
+        lay.addLayout(fila)
+        b_cancelar.clicked.connect(self.reject)
+        self.b_ok.clicked.connect(self._aplicar)
+
+    def _aplicar(self):
+        if self.nueva.text() != self.nueva2.text():
+            QMessageBox.warning(self, "Oceánica", "Las contraseñas nuevas no coinciden.")
+            return
+        try:
+            instalacion.restablecer_admin(self.conn, root_actual=self.recuperacion.text(),
+                                          usuario=self.usuario.text(), nueva=self.nueva.text())
+        except instalacion.ErrorInstalacion as e:
+            QMessageBox.warning(self, "Oceánica", str(e))
+            return
+        except Exception:
+            log.exception("Falló el restablecimiento de la contraseña de administrador")
+            QMessageBox.critical(self, "Oceánica", "No se pudo restablecer la contraseña. El detalle quedó en la "
+                                 "carpeta logs.")
+            return
+        self.usuario_ok = self.usuario.text().strip()
+        QMessageBox.information(self, "Oceánica", f"Listo. Entre como «{self.usuario_ok}» con la contraseña nueva.")
+        self.accept()
