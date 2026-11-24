@@ -37,7 +37,7 @@ personas crean el mismo número en ramas distintas, el sistema no puede migrar (
 | `oceanica/app/` | Interfaz PySide6: entrada, mostrador, órdenes, caja, asistencia, clientes, inventario y, para el administrador, panel, reportes, nómina, servicios y precios, empleados, transferencias y configuración |
 | `oceanica/app/botones.py` · `cobro.py` · `graficas.py` · `iconos.py` · `burbujas.py` · `importacion.py` | Botones grandes y teclado numérico, cobro por pasos, gráficas dibujadas con QPainter, íconos SVG, animación de la entrada y botones de importación desde Excel o CSV |
 | `oceanica/app/recursos/` | Logo, ícono e íconos de línea (Tabler Icons, licencia MIT) |
-| `tests/` | 238 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
+| `tests/` | 241 pruebas (esquema, seguridad, servicios e interfaz contra una base real) |
 
 ## Notas de actualización
 
@@ -154,12 +154,14 @@ Letra grande, botones amplios con íconos, trato de «usted», textos estándar 
   una barra de progreso que sigue el avance real (conectar, revisar la base, preparar pantallas), y dos sonidos: un aleteo
   al aparecer y un acorde al quedar listo. Conectar y poner la base al día corren en segundo plano para que no se congele.
 - **Sonidos** cortos y suaves: clic en botones, éxito (avisos de «Listo», ticket al terminar un cobro), error y la
-  entrada al sistema. No suena cada tecla, a propósito: en un mostrador cansa. Interruptor `interfaz_sonidos` en
+  entrada al sistema. No suena cada tecla, a propósito: en un mostrador cansa. Botón «Probar sonido» en Configuración para verificarlos en el acto. Interruptor `interfaz_sonidos` en
   Configuración (si/no; se aplica sin reiniciar). Solo en Windows.
 - **Animaciones**: brillo en el campo donde se escribe y un pulso por tecla, cambio de pantalla deslizándose, avisos
   que aparecen suavemente y el recuadro de entrada (o el PIN) que tiembla si la contraseña es incorrecta.
   Interruptor `interfaz_animaciones` (si/no), por si la computadora del local es lenta.
 - La entrada del administrador avisa si **Bloq Mayús** está activado.
+- En la entrada, **«¿Olvidó su contraseña?»** restablece una cuenta de administrador pidiendo la contraseña de
+  recuperación (root); deja la cuenta con la contraseña nueva y desbloqueada.
 
 ## Reglas del negocio según el cliente
 

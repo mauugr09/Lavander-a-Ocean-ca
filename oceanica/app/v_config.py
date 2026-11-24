@@ -1,6 +1,8 @@
 """Configuración del negocio y respaldos (administrador)."""
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QMessageBox, QPushButton, QVBoxLayout, QWidget)
 
 from .. import respaldos
@@ -36,8 +38,10 @@ class ConfigView(QWidget):
         self.b_editar = QPushButton("Cambiar valor")
         self.b_editar.setProperty("rol", "primario")
         self.b_respaldo = QPushButton("Hacer respaldo ahora")
+        self.b_sonido = QPushButton("Probar sonido")
         fila.addWidget(self.b_editar)
         fila.addStretch(1)
+        fila.addWidget(self.b_sonido)
         fila.addWidget(self.b_respaldo)
         lay.addLayout(fila)
         self.lb_respaldo = etiqueta("", "suave", True)
@@ -47,6 +51,16 @@ class ConfigView(QWidget):
         self.b_editar.clicked.connect(self.editar)
         self.tabla.itemActivated.connect(lambda *_: self.editar())
         self.b_respaldo.clicked.connect(self.respaldar)
+        self.b_sonido.clicked.connect(self.probar_sonido)
+
+    def probar_sonido(self):
+        # Suena aunque el interruptor esté en «no», para comprobar que la computadora reproduce audio.
+        efectos.reproducir("exito", forzar=True)
+        if sys.platform != "win32":
+            QMessageBox.information(self, "Sonido", "Los sonidos solo se reproducen en Windows.")
+        elif not efectos.sonidos:
+            QMessageBox.information(self, "Sonido", "Debió escuchar un tono. Los sonidos están apagados: "
+                                    "ponga «interfaz_sonidos» en «si» para oírlos en todo el programa.")
 
     def al_mostrar(self):
         e = respaldos.estado(self.ctx.conn)

@@ -187,3 +187,30 @@ def test_entrada_admin_avisa_y_sacude_en_error(conn, admin, monkeypatch):
     v.password.setText("Correcta#2026")
     v.b_admin.click()
     assert entradas and entradas[0]["rol"] == "administrador"
+
+
+def test_login_tiene_boton_olvido_y_abre_dialogo(conn, admin, monkeypatch):
+    preparar_aplicacion()
+    from oceanica.app import login as m_login
+    from oceanica.app.contexto import Contexto
+    v = m_login.LoginView(Contexto(conn))
+    assert v.b_olvido.text() == "¿Olvidó su contraseña?"
+    abiertos = []
+    monkeypatch.setattr(m_login.RestablecerAdminDialog, "exec", lambda self: (abiertos.append(self.usuario.text()), 0)[1])
+    v.usuario.setText(admin["usuario"])
+    v.b_olvido.click()
+    assert abiertos == [admin["usuario"]]        # abre el diálogo con el usuario ya puesto
+
+
+def test_probar_sonido_no_truena(conn, admin, monkeypatch):
+    preparar_aplicacion()
+    from PySide6.QtWidgets import QMessageBox
+    from oceanica.app.v_config import ConfigView
+    from oceanica.app.contexto import Contexto
+    avisos = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: avisos.append(a[2]))
+    ctx = Contexto(conn); ctx.admin = admin
+    v = ConfigView(ctx)
+    v.probar_sonido()                            # fuera de Windows no suena, pero no debe fallar ni colgarse
+    from oceanica.app.efectos import efectos as fx
+    assert fx.historial[-1] == "exito"

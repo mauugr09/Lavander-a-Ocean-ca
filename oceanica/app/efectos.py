@@ -31,13 +31,13 @@ log = logging.getLogger("oceanica")
 _FREC = 22050
 # nombre -> notas (frecuencia Hz, duración s) y volumen. Cortos y suaves: es un mostrador, no un videojuego.
 _SONIDOS = {
-    "clic": ([(1900, 0.018)], 0.16),
-    "aviso": ([(880, 0.09), (1175, 0.14)], 0.22),
-    "exito": ([(1047, 0.07), (1319, 0.07), (1568, 0.16)], 0.24),
-    "error": ([(392, 0.11), (294, 0.18)], 0.26),
-    "entrada": ([(784, 0.06), (1047, 0.06), (1319, 0.06), (1568, 0.2)], 0.22),
+    "clic": ([(1760, 0.035)], 0.55),
+    "aviso": ([(880, 0.11), (1175, 0.17)], 0.6),
+    "exito": ([(1047, 0.09), (1319, 0.09), (1568, 0.22)], 0.6),
+    "error": ([(392, 0.14), (294, 0.22)], 0.62),
+    "entrada": ([(784, 0.08), (1047, 0.08), (1319, 0.08), (1568, 0.26)], 0.6),
 }
-_VERSION = "v1"   # cambiar si cambian los tonos: se regeneran los archivos
+_VERSION = "v2"   # cambiar si cambian los tonos: se regeneran los archivos
 _ENTRADAS = (QLineEdit, QAbstractSpinBox, QComboBox, QTextEdit, QPlainTextEdit)
 
 
@@ -98,8 +98,9 @@ class Efectos(QObject):
             self._archivos[nombre] = ruta
         return self._archivos[nombre]
 
-    def reproducir(self, nombre: str) -> None:
-        if not self.sonidos or nombre not in _SONIDOS:
+    def reproducir(self, nombre: str, forzar: bool = False) -> None:
+        """forzar=True toca aunque los sonidos estén apagados (para «Probar sonido»)."""
+        if nombre not in _SONIDOS or (not self.sonidos and not forzar):
             return
         ahora = time.monotonic()
         if nombre == "clic" and ahora - self._ultimo < 0.06:   # un clic no tapa el sonido de lo que provocó
@@ -110,12 +111,13 @@ class Efectos(QObject):
             return
         ruta = self._archivo(nombre)
         if ruta is None:
+            log.warning("No se pudo preparar el archivo de sonido %s (no se reproducirá)", nombre)
             return
         try:
             import winsound
             winsound.PlaySound(str(ruta), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-        except Exception:   # sin tarjeta de sonido, etc.: el sistema sigue igual
-            log.debug("No se pudo reproducir %s", nombre, exc_info=True)
+        except Exception:   # sin tarjeta de sonido, etc.: el sistema sigue igual, pero queda en el log
+            log.warning("No se pudo reproducir el sonido %s", nombre, exc_info=True)
 
     # ------------------------------------------------------------------ animaciones
     def _correr(self, anim) -> None:
