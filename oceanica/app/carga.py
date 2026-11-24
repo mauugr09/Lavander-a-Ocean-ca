@@ -1,82 +1,123 @@
 """Pantalla de carga: aparece en cuanto abre el programa, antes de cargar las pantallas y conectar con la base.
 
-Animación: el logo dentro de una burbuja de jabón iridiscente que ondula; el logo se va «llenando» de abajo hacia
-arriba conforme avanza la carga real, con burbujas que suben por el fondo. Todo se dibuja con QPainter (sin videos ni
-archivos extra).
+Muestra el colibrí (un GIF) volando sobre un fondo oscuro, con el nombre y una barra de progreso que sigue el avance
+real de la carga, y dos sonidos: un aleteo al aparecer y un acorde al quedar listo.
 
 Este módulo solo usa Qt (no importa el resto del sistema) para salir lo antes posible.
 Las esperas largas (conectar, poner la base al día) corren en un hilo aparte para que la animación no se congele.
 """
 from __future__ import annotations
 
+import logging
 import math
-import random
+import struct
 import sys
 import threading
 import time
+import wave
 from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRectF, Qt, QTimer
-from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QFont, QLinearGradient, QPainter, QPainterPath, QPen,
-                           QPixmap, QRadialGradient)
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QMovie, QPainter, QPainterPath
 from PySide6.QtWidgets import QApplication, QWidget
 
+from ..config import RAIZ
+
 RECURSOS = Path(__file__).parent / "recursos"
-_TEXTO, _SUAVE = "#14324A", "#5E7488"
-MINIMO_VISIBLE = 1.6   # segundos: lo justo para que se vea la animación sin hacer esperar de más
-_IRIS = ["#7FDBFF", "#5B8CFF", "#A77BFF", "#FF8AD8", "#FFD27A", "#9BFFCF", "#7FDBFF"]   # película de jabón
+GIF = RECURSOS / "colibri.gif"
+log = logging.getLogger("oceanica")
+MINIMO_VISIBLE = 2.2   # segundos: para alcanzar a ver el colibrí sin hacer esperar de más
+
+# Sonidos generados aquí mismo (sin archivos de terceros); se escriben una vez y se tocan con winsound en Windows.
+_FREC = 44100
 
 
-class _Pompa:
-    """Burbuja del fondo (como las del segundo video): transparente, borde brillante, sube con vaivén."""
+def _wav(ruta: Path, muestras: bytearray) -> None:
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(ruta), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(_FREC)
+        w.writeframes(bytes(muestras))
 
-    def __init__(self, ancho: float, alto: float, abajo: bool):
-        self.radio = random.choice([random.uniform(8, 22)] * 3 + [random.uniform(28, 70)])
-        self.x = random.uniform(0, ancho)
-        self.y = alto + self.radio + random.uniform(0, alto * 0.4) if abajo else random.uniform(0, alto)
-        self.vel = random.uniform(0.35, 1.0) * (1.3 if self.radio < 22 else 1.0)
-        self.fase = random.uniform(0, math.tau)
-        self.amp = random.uniform(6, 20)
-        self.giro = random.uniform(0, 360)
-        self.alfa = random.uniform(0.45, 0.95)
+
+def _gen_aleteo() -> bytearray:
+    import random
+    random.seed(1)
+    m = bytearray()
+    dur, prev = 0.7, 0.0
+    for i in range(int(_FREC * dur)):
+        t = i / _FREC
+        env = min(1, t / 0.08) * min(1, (dur - t) / 0.2)
+        trem = 0.6 + 0.4 * math.sin(2 * math.pi * 45 * t)
+        prev = prev * 0.82 + random.uniform(-1, 1) * 0.18     # ruido suave (pasa-bajos)
+        v = 0.33 * env * trem * prev
+        m += struct.pack("<h", int(max(-1, min(1, v)) * 32767))
+    return m
+
+
+def _gen_listo() -> bytearray:
+    m = bytearray()
+    for frec, dur in [(784, 0.07), (1047, 0.07), (1319, 0.07), (1568, 0.24)]:
+        for i in range(int(_FREC * dur)):
+            t = i / _FREC
+            env = min(1, t / 0.004) * math.exp(-3.8 * t / dur)
+            v = 0.5 * env * (math.sin(2 * math.pi * frec * t) + 0.2 * math.sin(4 * math.pi * frec * t))
+            m += struct.pack("<h", int(max(-1, min(1, v)) * 32767))
+    return m
+
+
+_SONIDOS = {"aleteo": _gen_aleteo, "listo": _gen_listo}
+
+
+def _reproducir(nombre: str) -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        ruta = RAIZ / "sonidos" / f"{nombre}_carga.wav"
+        if not ruta.exists():
+            _wav(ruta, _SONIDOS[nombre]())
+        import winsound
+        winsound.PlaySound(str(ruta), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+    except Exception:
+        log.debug("No se pudo reproducir el sonido de carga %s", nombre, exc_info=True)
 
 
 class PantallaCarga(QWidget):
-    ANCHO, ALTO = 620, 470
+    ANCHO, ALTO = 640, 470
 
     def __init__(self):
         super().__init__(None, Qt.SplashScreen | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(self.ANCHO, self.ALTO)
         self.texto = "Abriendo…"
-        self.t = 0.0                 # tiempo de la animación (s)
         self.progreso = 0.0          # lo que se ve (0 a 1)
-        self.objetivo = 0.15         # lo que ya se cargó de verdad
+        self.objetivo = 0.1          # lo que ya se cargó de verdad
         self._inicio = time.monotonic()
         self._ultimo = self._inicio
-        logo = RECURSOS / "logo.png"
-        self._logo = QPixmap(str(logo)) if logo.exists() else QPixmap()
-        self._pompas = [_Pompa(self.ANCHO, self.ALTO, abajo=False) for _ in range(18)]
+        self._movie = None
+        if GIF.exists():
+            mv = QMovie(str(GIF))
+            if mv.isValid():
+                mv.setCacheMode(QMovie.CacheAll)
+                mv.frameChanged.connect(self.update)
+                mv.start()
+                self._movie = mv
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._avanzar)
         self._timer.start(16)
         pantalla = QApplication.primaryScreen()
         if pantalla:
             self.move(pantalla.availableGeometry().center() - self.rect().center())
+        QTimer.singleShot(120, lambda: _reproducir("aleteo"))
 
     # ------------------------------------------------------------------ avance
     def _avanzar(self):
         ahora = time.monotonic()
         dt = min(0.05, ahora - self._ultimo)
         self._ultimo = ahora
-        self.t += dt
-        # se acerca a lo cargado; si algo tarda, sigue avanzando muy despacio para que no parezca trabado
         meta = max(self.objetivo, min(0.97, self.progreso + 0.004 * dt))
-        self.progreso += (meta - self.progreso) * min(1.0, dt * 3.2)
-        for i, b in enumerate(self._pompas):
-            b.y -= b.vel * dt * 60
-            if b.y < -b.radio * 2:
-                self._pompas[i] = _Pompa(self.ANCHO, self.ALTO, abajo=True)
+        self.progreso += (meta - self.progreso) * min(1.0, dt * 3.0)
         self.update()
 
     def avance(self, fraccion: float):
@@ -109,18 +150,21 @@ class PantallaCarga(QWidget):
         return resultado.get("valor")
 
     def cerrar(self, ventana=None):
-        """Termina de llenar el logo, espera lo mínimo para que se vea y se desvanece."""
+        """Espera lo mínimo para que se vea el colibrí, suena el acorde y se desvanece."""
         self.avance(1.0)
         self.texto = "Listo"
-        limite = time.monotonic() + 1.5   # nunca se queda más de esto esperando a que se llene
+        limite = time.monotonic() + 1.5
         while time.monotonic() < limite and (time.monotonic() - self._inicio < MINIMO_VISIBLE or self.progreso < 0.995):
             QApplication.processEvents()
             time.sleep(0.01)
         self.progreso = 1.0
+        _reproducir("listo")
         if ventana is not None:
             ventana.raise_()
+        if self._movie is not None:
+            self._movie.stop()
         anim = QPropertyAnimation(self, b"windowOpacity", self)
-        anim.setDuration(260)
+        anim.setDuration(280)
         anim.setStartValue(1.0)
         anim.setEndValue(0.0)
         anim.setEasingCurve(QEasingCurve.InCubic)
@@ -130,151 +174,58 @@ class PantallaCarga(QWidget):
         self._anim = anim
 
     # ------------------------------------------------------------------ dibujo
-    def _contorno(self, c: QPointF, r: float) -> QPainterPath:
-        """Borde de la burbuja que ondula despacio (como la del primer video)."""
-        camino = QPainterPath()
-        n = 72
-        for i in range(n + 1):
-            a = math.tau * i / n
-            d = (math.sin(3 * a + self.t * 1.7) * 0.022 + math.sin(2 * a - self.t * 1.1) * 0.018
-                 + math.sin(5 * a + self.t * 2.3) * 0.008)
-            punto = QPointF(c.x() + math.cos(a) * r * (1 + d), c.y() + math.sin(a) * r * (1 - d * 0.8))
-            if i == 0:
-                camino.moveTo(punto)
-            else:
-                camino.lineTo(punto)
-        camino.closeSubpath()
-        return camino
-
-    @staticmethod
-    def _pintar_pompa(p: QPainter, c: QPointF, r: float, alfa: float, giro: float):
-        g = QRadialGradient(c, r)
-        g.setColorAt(0.0, QColor(255, 255, 255, 0))
-        g.setColorAt(0.82, QColor(200, 225, 245, int(18 * alfa)))
-        g.setColorAt(1.0, QColor(150, 190, 230, int(55 * alfa)))
-        p.setBrush(g)
-        borde = QConicalGradient(c, giro)
-        for i, col in enumerate(_IRIS):
-            q = QColor(col)
-            q.setAlpha(int(120 * alfa))
-            borde.setColorAt(i / (len(_IRIS) - 1), q)
-        p.setPen(QPen(QBrush(borde), max(1.0, r * 0.05)))
-        p.drawEllipse(c, r, r)
-        p.setPen(QPen(QColor(255, 255, 255, int(200 * alfa)), max(1.0, r * 0.06), Qt.SolidLine, Qt.RoundCap))
-        p.setBrush(Qt.NoBrush)
-        p.drawArc(QRectF(c.x() - r * 0.72, c.y() - r * 0.72, r * 1.44, r * 1.44), 110 * 16, 45 * 16)
-
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
-        caja = QRectF(self.rect()).adjusted(10, 10, -10, -10)
-
-        # tarjeta con sombra suave
-        sombra = QPainterPath()
-        sombra.addRoundedRect(caja.translated(0, 4), 28, 28)
-        p.fillPath(sombra, QColor(20, 50, 74, 45))
+        caja = QRectF(self.rect()).adjusted(8, 8, -8, -8)
         tarjeta = QPainterPath()
-        tarjeta.addRoundedRect(caja, 28, 28)
-        fondo = QLinearGradient(caja.topLeft(), caja.bottomRight())
-        fondo.setColorAt(0.0, QColor("#F7FBFF"))
-        fondo.setColorAt(0.55, QColor("#EAF3FB"))
-        fondo.setColorAt(1.0, QColor("#E4EDFA"))
+        tarjeta.addRoundedRect(caja, 26, 26)
+        fondo = QLinearGradient(caja.topLeft(), caja.bottomLeft())
+        fondo.setColorAt(0.0, QColor("#32526B"))
+        fondo.setColorAt(0.55, QColor("#213E54"))
+        fondo.setColorAt(1.0, QColor("#152A3C"))
         p.fillPath(tarjeta, fondo)
 
-        # burbujas que suben por el fondo (segundo video)
         p.save()
         p.setClipPath(tarjeta)
-        for b in self._pompas:
-            x = b.x + math.sin(b.fase + self.t * 0.9) * b.amp
-            self._pintar_pompa(p, QPointF(x, b.y), b.radio, b.alfa, b.giro + self.t * 40)
+        gw, gh = 600.0, 338.0
+        gx = (self.width() - gw) / 2
+        gy = 20.0
+        if self._movie is not None:
+            cuadro = self._movie.currentPixmap()
+            if not cuadro.isNull():
+                p.drawPixmap(QRectF(gx, gy, gw, gh), cuadro, QRectF(cuadro.rect()))
+        # difuminar los bordes del gif hacia el fondo (quita la franja oscura del video)
+        azul = QColor("#213E54")
+        ft = QLinearGradient(0, gy - 4, 0, gy + 56)
+        ft.setColorAt(0.0, QColor(50, 82, 107)); ft.setColorAt(1.0, QColor(50, 82, 107, 0))
+        p.fillRect(QRectF(gx, gy - 4, gw, 60), ft)
+        fb = QLinearGradient(0, gy + gh - 70, 0, gy + gh + 8)
+        c0 = QColor(azul); c0.setAlpha(0)
+        fb.setColorAt(0.0, c0); fb.setColorAt(1.0, azul)
+        p.fillRect(QRectF(gx, gy + gh - 70, gw, 80), fb)
         p.restore()
 
-        # burbuja principal con el logo (primer video)
-        c = QPointF(caja.center().x(), caja.top() + 175)
-        r = 118.0
-        contorno = self._contorno(c, r)
-
-        halo = QRadialGradient(c, r * 1.45)
-        halo.setColorAt(0.6, QColor(127, 219, 255, 55))
-        halo.setColorAt(1.0, QColor(127, 219, 255, 0))
-        p.setPen(Qt.NoPen)
-        p.setBrush(halo)
-        p.drawEllipse(c, r * 1.45, r * 1.45)
-
-        p.save()
-        p.setClipPath(contorno)
-        cuerpo = QRadialGradient(c - QPointF(r * 0.2, r * 0.25), r * 1.15)
-        cuerpo.setColorAt(0.0, QColor(255, 255, 255, 235))
-        cuerpo.setColorAt(0.7, QColor(232, 244, 255, 220))
-        cuerpo.setColorAt(1.0, QColor(205, 225, 250, 230))
-        p.fillPath(contorno, cuerpo)
-
-        if not self._logo.isNull():
-            lado = r * 1.62
-            destino = QRectF(c.x() - lado / 2, c.y() - lado / 2, lado, lado)
-            p.setOpacity(0.16)                                   # logo «vacío»: tenue
-            p.drawPixmap(destino, self._logo, QRectF(self._logo.rect()))
-            p.setOpacity(1.0)
-            nivel = c.y() + r - 2 * r * self.progreso            # nivel del llenado, con superficie ondulada
-            agua = QPainterPath()
-            agua.moveTo(c.x() - r * 1.2, c.y() + r * 1.2)
-            pasos = 40
-            for i in range(pasos + 1):
-                x = c.x() - r * 1.2 + 2.4 * r * i / pasos
-                ola = math.sin(x / 22 + self.t * 3.2) * 4.5 + math.sin(x / 13 - self.t * 2.1) * 2.0
-                agua.lineTo(x, nivel + ola * (1 - self.progreso ** 6))
-            agua.lineTo(c.x() + r * 1.2, c.y() + r * 1.2)
-            agua.closeSubpath()
-            p.save()
-            p.setClipPath(agua, Qt.IntersectClip)
-            p.drawPixmap(destino, self._logo, QRectF(self._logo.rect()))
-            tinte = QLinearGradient(QPointF(0, nivel), QPointF(0, c.y() + r))
-            tinte.setColorAt(0.0, QColor(127, 219, 255, 40))
-            tinte.setColorAt(1.0, QColor(91, 140, 255, 25))
-            p.fillPath(agua, tinte)
-            p.restore()
-
-        # película iridiscente moviéndose por dentro del borde
-        for k, col in enumerate(("#FF8AD8", "#FFD27A", "#A77BFF", "#7FDBFF")):
-            a = self.t * (0.55 + 0.12 * k) + k * 1.6
-            centro = QPointF(c.x() + math.cos(a) * r * 0.78, c.y() + math.sin(a * 1.3) * r * 0.78)
-            mancha = QRadialGradient(centro, r * 0.75)
-            q = QColor(col)
-            q.setAlpha(70)
-            mancha.setColorAt(0.0, q)
-            q.setAlpha(0)
-            mancha.setColorAt(1.0, q)
-            p.fillPath(contorno, mancha)
-        p.restore()
-
-        # borde iridiscente que gira, con resplandor
-        iris = QConicalGradient(c, self.t * 35)
-        for i, col in enumerate(_IRIS):
-            iris.setColorAt(i / (len(_IRIS) - 1), QColor(col))
-        p.setBrush(Qt.NoBrush)
-        for ancho, alfa in ((14, 0.18), (7, 0.35), (2.6, 0.95)):
-            p.setOpacity(alfa)
-            p.setPen(QPen(QBrush(iris), ancho))
-            p.drawPath(contorno)
-        p.setOpacity(1.0)
-
-        # brillos
-        p.setPen(QPen(QColor(255, 255, 255, 230), 7, Qt.SolidLine, Qt.RoundCap))
-        p.drawArc(QRectF(c.x() - r * 0.78, c.y() - r * 0.78, r * 1.56, r * 1.56), 112 * 16, 38 * 16)
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 255, 255, 210))
-        p.drawEllipse(QPointF(c.x() - r * 0.5, c.y() - r * 0.74), 5, 4)
-
-        # textos
-        y = c.y() + r + 34
-        p.setPen(QColor(_TEXTO))
-        p.setFont(QFont("Segoe UI", 17, QFont.DemiBold))
-        p.drawText(QRectF(caja.left(), y, caja.width(), 32), Qt.AlignHCenter, "Lavandería Oceánica")
-        p.setPen(QColor(_SUAVE))
+        p.setPen(QColor("#FFFFFF"))
+        p.setFont(QFont("Segoe UI", 18, QFont.DemiBold))
+        p.drawText(QRectF(caja.left(), 378, caja.width(), 34), Qt.AlignHCenter, "Lavandería Oceánica")
+        p.setPen(QColor("#AFC6DA"))
         p.setFont(QFont("Segoe UI", 10))
-        p.drawText(QRectF(caja.left(), y + 38, caja.width(), 22), Qt.AlignHCenter,
+        p.drawText(QRectF(caja.left(), 416, caja.width(), 22), Qt.AlignHCenter,
                    f"{self.texto}   {int(round(self.progreso * 100))} %")
+
+        bw = self.width() - 200
+        bx = 100.0
+        by = 446.0
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 255, 255, 40))
+        p.drawRoundedRect(QRectF(bx, by, bw, 5), 2.5, 2.5)
+        grad = QLinearGradient(bx, 0, bx + bw, 0)
+        grad.setColorAt(0.0, QColor("#27B5C6"))
+        grad.setColorAt(1.0, QColor("#5AA9FF"))
+        p.setBrush(grad)
+        p.drawRoundedRect(QRectF(bx, by, bw * self.progreso, 5), 2.5, 2.5)
         p.end()
 
 
